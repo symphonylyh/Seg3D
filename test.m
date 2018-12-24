@@ -1,8 +1,10 @@
-% Libraries:
+% Libraries related:
 % Graph & Mesh: https://www.mathworks.com/matlabcentral/fileexchange/5355-toolbox-graph 
 % Queue/Stack (Cqueue.m:96 bug fix): https://www.mathworks.com/matlabcentral/fileexchange/28922-list-queue-stack
+% Triangulation Volume (triangulationVolume.m:59 bug fix): https://www.mathworks.com/matlabcentral/fileexchange/15221-triangulationvolume
 addpath(genpath('toolbox_graph'));
 addpath(genpath('datastructure'));
+addpath(genpath('triangulationVolume'));
 clear options;
 clc;
 close all;
@@ -249,26 +251,56 @@ objects = component{max_set} == 0;
 edge = boundary_extract(faces, objects);
 
 object_faces = faces(:, objects);
-object_vertices = vertex(:, unique(object_faces(:)));
-scatter3(object_vertices(1,:), object_vertices(2,:), object_vertices(3,:));
+object_vertices = vertex(:, unique(object_faces(:)))';
+scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
 
-% Delaunay + Convex hull
-DT = delaunayTriangulation(object_vertices');
-[C, v] = convexHull(DT);
-v
-trisurf(C,DT.Points(:,1),DT.Points(:,2),DT.Points(:,3), 'FaceColor','cyan');
-axis equal;
-% Alpha shape: https://www.mathworks.com/matlabcentral/answers/152189-volume-of-3d-polyhedron
-% ashape = alphaShape(object_vertices');
-% h = plot(ashape);
-% v = volume(ashape);
-% v
-% Toolbox: https://www.mathworks.com/matlabcentral/fileexchange/15221-triangulationvolume
-% Bug fix line:59, remove abs()
+% Calculate volume encompassed by a set of points
+% [Ref] Volume calculation:
 % https://stackoverflow.com/questions/1406029/how-to-calculate-the-volume-of-a-3d-mesh-object-the-surface-of-which-is-made-up
-[vol, area] = triangulationVolume(object_faces', vertex(1, :), vertex(2, :), vertex(3, :));
-vol
+% [Ref] Triangulation methods:
+% http://www.csie.ntnu.edu.tw/~u91029/Triangulation.html
 
+% Method 1: Denaulay triangulation + Convex hull (built-in function, but
+% not what I want) OR manually calculate
+DT = delaunayTriangulation(object_vertices);
+[C, v] = convexHull(DT); 
+% C: connectivity list (vertex indices) of the triangles on the convex hull
+% v: volume of the convex hull
+trisurf(C,DT.Points(:,1),DT.Points(:,2),DT.Points(:,3),'Facecolor','red','FaceAlpha',0.1);
+axis equal;
+v
+% Manual calculation (very slow)
+vol = 0; area = 0;
+for t = 1 : length(DT.ConnectivityList)
+    indices = DT.ConnectivityList(t, :);
+    V1 = DT.Points(indices(1), :);
+    V2 = DT.Points(indices(2), :);
+    V3 = DT.Points(indices(3), :);
+    V4 = DT.Points(indices(4), :);
+    % Calculate volume and area of a tetrahedron
+    V = 1/6 * abs(dot(cross(V2-V1,V3-V1),V4-V1));
+    A123 = 1/2 * norm(cross(V2-V1,V3-V1));
+    A124 = 1/2 * norm(cross(V2-V1,V4-V1));
+    A134 = 1/2 * norm(cross(V3-V1,V4-V1));
+    A234 = 1/2 * norm(cross(V3-V2,V4-V2));
+    vol = vol + V;
+    area = area + A123 + A124 + A134 + A234;
+end
+vol
+% volumes from both approaches are identical
+
+% Method 2: Boundary face + Gauss's divergence theorem (perfect & elegant,
+% for close surface mesh only) OR from MATLAB built-in alphaShape volume
+% (automatically calculated in function boundary())
+[B, v] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
+v
+% Gauss divergence
+[vol, area] = triangulationVolume(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3));
+vol
+% volumes from both approaches are identical
+
+% Display
 % Segmented particle
 figure(1);
 face_colors = 0.3 * ones(size(object_faces, 2), 1);
@@ -355,5 +387,10 @@ caxis([0 1]); % fix colormap range
 % asynchronously update the dynamic centroid by putting a placeholder in
 % the queue when a expand cycle of BFS is finished 
 
-% Curvature toolbox:
+% Curvature toolbox CurvatureEstimation:
 % https://www.mathworks.com/matlabcentral/fileexchange/47134-curvature-estimationl-on-triangle-mesh
+% Normal vector toolbox computeNormalVectorTriangulation:
+% https://www.mathworks.com/matlabcentral/fileexchange/23063-compute-normal-vectors-of-2-5d-triangulation
+% Iso2Mesh toolbox:
+% http://iso2mesh.sourceforge.net/cgi-bin/index.cgi?Download
+s

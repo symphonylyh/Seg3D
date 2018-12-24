@@ -85,9 +85,11 @@ area = abs(area); % If the normal vectors are oriented outwards, this should not
 %
 %
 % To compute the volume V of a closed surface S:
+% When div F = 1, V = /// divF dV = /// 1 dV is the volume!
+% So we can define such F like [x 0 0] or 1/3[x y z]
 %        _                     _
 % Define F = [x,0,0], with div F = 1 + 0 + 0 = 1
-%
+% 
 %      ---          --_ _
 % V = /// 1 dV  =  // x.n dA
 %    ---          --
