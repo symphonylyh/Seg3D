@@ -13,7 +13,7 @@ function h = plot_mesh(vertex,face,options)
 %
 %   See also: mesh_previewer.
 %
-%   Copyright (c) 2004 Gabriel PeyrŽ
+%   Copyright (c) 2004 Gabriel Peyrï¿½
 
 
 if nargin<2
@@ -140,7 +140,8 @@ if ~isempty(normal)
     hold off;
 end
 
-cameramenu;
+%cameramenu;
+cameratoolbar;
 switch lower(name)
     case 'hammerheadtriang'
         view(150,-45);
