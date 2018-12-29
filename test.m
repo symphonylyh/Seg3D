@@ -1,4 +1,9 @@
-% Libraries related:
+%% Mesh Pre-processing (MeshLab)
+% Filters-Cleaning and Repairing-Merge Close Vertices
+% Filters-Sampling-Point Cloud Simplification-Number of Samples: 100000
+% Filters-Remeshing, Simplification and Reconstruction-Surface Reconstruction: Ball Pivoting
+
+%% Libraries related:
 % Graph & Mesh: https://www.mathworks.com/matlabcentral/fileexchange/5355-toolbox-graph 
 % Queue/Stack (Cqueue.m:96 bug fix): https://www.mathworks.com/matlabcentral/fileexchange/28922-list-queue-stack
 % Triangulation Volume (triangulationVolume.m:59 bug fix): https://www.mathworks.com/matlabcentral/fileexchange/15221-triangulationvolume
@@ -33,7 +38,8 @@ for i = 1 : size(faces, 2)
     v1_ring = vertex_face_rings{face(1)};
     v2_ring = vertex_face_rings{face(2)};
     v3_ring = vertex_face_rings{face(3)};
-    vertex_rings{i} = unique([v1_ring v2_ring v3_ring]);
+    all_neighbors = unique([v1_ring v2_ring v3_ring]);
+    vertex_rings{i} = all_neighbors(all_neighbors ~= i); % exclude the current face
     % Normal vectors
     normal = cross(v2 - v1, v3 - v1); % assume a counter-clockwise order convention of vertices, then the cross product should also be counter-clockwise, v2-v1-->v3-v1, right-hand principle
     normal = normal / norm(normal); % normalize vector
@@ -41,6 +47,16 @@ for i = 1 : size(faces, 2)
     % Center coordinates
     face_centers(:, i) = (v1 + v2 + v3) / 3;
 end
+
+%% Display original mesh
+figure(fig); fig = fig + 1;
+title('Original Mesh');
+face_colors = ones(size(faces, 2), 1);
+options.face_vertex_color = face_colors;
+plot_mesh(vertex, faces, options);
+shading faceted;  
+colormap hot;
+caxis([0 1]);
 
 %% Breadth-First Search Traversal
 % Label all faces into one of the following categories in array 'state':
@@ -158,12 +174,12 @@ while q.isempty() ~= 1
                 else
                     boundary_neighbors = vertex_rings{adj_id};
                 end
-%                 for b = 1 : length(boundary_neighbors)
-%                     boundary_id = boundary_neighbors(b);
-%                     if state(boundary_id) == 0
-%                         state(boundary_id) = 2;
-%                     end
-%                 end
+                for b = 1 : length(boundary_neighbors)
+                    boundary_id = boundary_neighbors(b);
+                    if state(boundary_id) == 0
+                        state(boundary_id) = 2;
+                    end
+                end
             end
         end
     end
@@ -172,10 +188,11 @@ end
 %% Display raw mesh
 % Per-face coloring: Non-visited face-0 (black), object vertex-0.3 (red), boundary vertex-1.0 (white)
 figure(fig); fig = fig + 1;
+title('Raw Mesh');
 face_colors = zeros(size(faces, 2), 1);
 objects = state == 1; face_colors(objects) = 0.3;
 boundaries = state == 2; face_colors(boundaries) = 1.0;
-DISPLAY_HHH = true;
+DISPLAY_HHH = false;
 if DISPLAY_HHH
     % My manual display settings
     h = patch('vertices',vertex','faces',faces','FaceVertexCData', face_colors, 'FaceColor', 'flat');
@@ -202,7 +219,7 @@ end
 
 % Plot normal for a specific face index
 hold on;
-id = 517; %seed;
+id = 7124; %seed;
 quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id), face_normals(2,id), face_normals(3,id), 'r'); % draw normal
 
 %% Mesh Cleaning by Detecting connected components in unvisited faces (BFS)
@@ -257,6 +274,7 @@ boundaries = boundary_extract(faces, objects);
 
 %% Display cleaned mesh
 figure(fig); fig = fig + 1;
+title('Cleaned Mesh');
 face_colors = zeros(size(faces, 2), 1);
 face_colors(objects) = 0.3;
 face_colors(boundaries) = 1.0;
@@ -264,6 +282,62 @@ options.face_vertex_color = face_colors;
 plot_mesh(vertex, faces, options);
 shading faceted;  
 colormap hot;
+
+%% Optimize boundary (shortcut)
+E_local = [];
+E_global = [];
+for i = 1 : length(boundaries)
+    neighbors = vertex_rings{boundaries(i)};
+    neighbors = intersect(neighbors, boundaries);
+    temp = [repmat(boundaries(i),length(neighbors),1) neighbors];
+    E_local = [E_local; temp];
+end
+
+object_faces = find(objects == 1); % edge for object faces only
+% object_faces = 1 : length(faces); % edge for all faces
+for i = 1 : length(object_faces)
+    neighbors = vertex_rings{object_faces(i)};
+    temp = [repmat(object_faces(i),length(neighbors),1) neighbors'];
+    E_global = [E_global; temp];   
+end
+
+boundaries = optimize_with_direct_dist(E_local, E_global, face_centers', boundaries', 20); 
+
+%% Display optimized mesh
+visited = zeros(size(faces, 2), 1);
+fence = zeros(size(faces, 2), 1);
+q.empty();
+q.push(seed);
+visited(seed) = 1;
+fence(boundaries) = 1;
+while q.isempty() ~= 1
+    curr_id = q.pop();
+    neighbors = face_rings{curr_id};
+    for f = 1 : length(neighbors)
+        adj_id = neighbors(f);
+        if visited(adj_id) == 0 % skip all visited faces
+            if fence(adj_id) == 0
+                % object face (push to queue)
+                visited(adj_id) = 1;
+                q.push(adj_id); 
+            end
+        end
+    end
+end
+objects = visited == 1;
+
+% Display optimized boundary
+figure(fig); fig = fig + 1;
+title('Optimized Mesh');
+face_colors = zeros(size(faces, 2), 1);
+face_colors(objects) = 0.3;
+%face_colors(boundaries) = 1.0;
+options.face_vertex_color = face_colors;
+plot_mesh(vertex, faces, options);
+shading faceted;  
+colormap hot;
+caxis([0 1]);
+
 
 %% Segment out single particle & Volume calculation
 object_faces = faces(:, objects);
