@@ -68,21 +68,21 @@ q = CQueue();                     % queue for BFS, storing the face index, i.e. 
 
 % Good seeds
 seed = 2388; 
-% seed = 364;
-% seed = 1358;
-% seed = 5004;
-% seed = 7212;
-% seed = 10417;
-% seed = 9391;
-% seed = 7924;
-% seed = 1113; % this case indicates the need for boundary completion (i.e. if a detected boundary face is quite close to what's already in the boundary set, we should directly connect them)
+seed = 364;
+seed = 1358;
+seed = 5004;
+seed = 7212;
+seed = 10417;
+seed = 9391;
+seed = 7924;
+seed = 1113; % this case indicates the need for boundary completion (i.e. if a detected boundary face is quite close to what's already in the boundary set, we should directly connect them)
 % Bad seeds
-% seed = 3159; % in-between
-% seed = 1108;
-% seed = 3617;
-% seed = 10837;
-% seed = 8730;
-% seed = 1703; % trepass
+seed = 3159; % in-between
+seed = 1108;
+seed = 3617;
+seed = 10837;
+seed = 8730;
+seed = 1703; % trepass
 
 % Thresholds and Controls
 threshold1 = 0.6;         % local criterion for convexity/curvature (adjustable, and since both vectors are normalized, this threshold value is actually a theta angle that you can specify)
@@ -94,7 +94,7 @@ global_trigger_val = 10;  % trigger 'center_change_ratio(%)' value for the globa
 % and will also help the later completion step; 
 % maybe, a surface/volume ratio metric can help; 
 % maybe, the sum/avg of perpendicular distance from centroid to all object faces can help
-neighboring = 2; % 1-face neighboring (edge adjacency), 2-vertex neighboring (vertex adjacency)
+neighboring = 1; % 1-face neighboring (edge adjacency), 2-vertex neighboring (vertex adjacency)
 
 % Initialize
 placeholder = 0; % BFS placeholder (a face index can never be 0 b/c Matlab is 1-based)
@@ -219,7 +219,7 @@ end
 
 % Plot normal for a specific face index
 hold on;
-id = 7124; %seed;
+id = seed;
 quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id), face_normals(2,id), face_normals(3,id), 'r'); % draw normal
 
 %% Mesh Cleaning by Detecting connected components in unvisited faces (BFS)
@@ -301,43 +301,105 @@ for i = 1 : length(object_faces)
     E_global = [E_global; temp];   
 end
 
-boundaries = optimize_with_direct_dist(E_local, E_global, face_centers', boundaries', 20); 
-
-%% Display optimized mesh
-visited = zeros(size(faces, 2), 1);
-fence = zeros(size(faces, 2), 1);
-q.empty();
-q.push(seed);
-visited(seed) = 1;
-fence(boundaries) = 1;
-while q.isempty() ~= 1
-    curr_id = q.pop();
-    neighbors = face_rings{curr_id};
-    for f = 1 : length(neighbors)
-        adj_id = neighbors(f);
-        if visited(adj_id) == 0 % skip all visited faces
-            if fence(adj_id) == 0
-                % object face (push to queue)
-                visited(adj_id) = 1;
-                q.push(adj_id); 
+num_change = 3;
+total_faces = length(object_faces);
+for i = 1 : num_change
+    boundaries = optimize_with_direct_dist(E_local, E_global, face_centers', boundaries', 1); 
+    % BFS
+    visited = zeros(size(faces, 2), 1);
+    fence = zeros(size(faces, 2), 1);
+    q.empty();
+    q.push(seed);
+    visited(seed) = 1;
+    fence(boundaries) = 1;
+    while q.isempty() ~= 1
+        curr_id = q.pop();
+        neighbors = face_rings{curr_id};
+        for f = 1 : length(neighbors)
+            adj_id = neighbors(f);
+            if visited(adj_id) == 0 % skip all visited faces
+                if fence(adj_id) == 0
+                    % object face (push to queue)
+                    visited(adj_id) = 1;
+                    q.push(adj_id); 
+                end
             end
         end
     end
+    objects_temp = visited == 1;
+    if sum(objects_temp(:)) <= 0.6 * total_faces % should add seed
+        break;
+    end
+    objects = objects_temp;
+    boundaries = boundary_extract(faces, objects);
+    
+    % Update E_local
+    E_local = [];
+    for j = 1 : length(boundaries)
+        neighbors = vertex_rings{boundaries(j)};
+        neighbors = intersect(neighbors, boundaries);
+        temp = [repmat(boundaries(j),length(neighbors),1) neighbors];
+        E_local = [E_local; temp];
+    end
 end
-objects = visited == 1;
 
+%% Display optimized mesh
 % Display optimized boundary
 figure(fig); fig = fig + 1;
-title('Optimized Mesh');
+title('Optimized Mesh_0');
 face_colors = zeros(size(faces, 2), 1);
 face_colors(objects) = 0.3;
-%face_colors(boundaries) = 1.0;
+face_colors(boundaries) = 1.0;
 options.face_vertex_color = face_colors;
 plot_mesh(vertex, faces, options);
 shading faceted;  
 colormap hot;
 caxis([0 1]);
 
+% visited = zeros(size(faces, 2), 1);
+% fence = zeros(size(faces, 2), 1);
+% q.empty();
+% q.push(seed);
+% visited(seed) = 1;
+% fence(boundaries) = 1;
+% while q.isempty() ~= 1
+%     curr_id = q.pop();
+%     neighbors = face_rings{curr_id};
+%     for f = 1 : length(neighbors)
+%         adj_id = neighbors(f);
+%         if visited(adj_id) == 0 % skip all visited faces
+%             if fence(adj_id) == 0
+%                 % object face (push to queue)
+%                 visited(adj_id) = 1;
+%                 q.push(adj_id); 
+%             end
+%         end
+%     end
+% end
+% objects = visited == 1;
+% boundaries = boundary_extract(faces, objects);
+
+% Display optimized boundary
+figure(fig); fig = fig + 1;
+title('Optimized Mesh');
+face_colors = zeros(size(faces, 2), 1);
+face_colors(objects) = 0.3;
+face_colors(boundaries) = 1.0;
+options.face_vertex_color = face_colors;
+plot_mesh(vertex, faces, options);
+shading faceted;  
+colormap hot;
+caxis([0 1]);
+
+% Segmented particle
+figure(fig); fig = fig + 1;
+object_faces = faces(:, objects);
+face_colors = 0.3 * ones(size(object_faces, 2), 1);
+options.face_vertex_color = face_colors;
+plot_mesh(vertex, object_faces, options);
+shading faceted; 
+colormap hot; 
+caxis([0 1]);
 
 %% Segment out single particle & Volume calculation
 object_faces = faces(:, objects);
