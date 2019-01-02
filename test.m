@@ -1,8 +1,3 @@
-%% Mesh Pre-processing (MeshLab)
-% Filters-Cleaning and Repairing-Merge Close Vertices
-% Filters-Sampling-Point Cloud Simplification-Number of Samples: 100000
-% Filters-Remeshing, Simplification and Reconstruction-Surface Reconstruction: Ball Pivoting
-
 %% Libraries related:
 % Graph & Mesh: https://www.mathworks.com/matlabcentral/fileexchange/5355-toolbox-graph 
 % Queue/Stack (Cqueue.m:96 bug fix): https://www.mathworks.com/matlabcentral/fileexchange/28922-list-queue-stack
@@ -14,7 +9,7 @@ close all;
 fig = 1;
 
 %% Read Mesh and Pre-compute Mesh Info
-name = 'all_particle';
+name = 'clean_mesh';
 [vertex,faces] = read_mesh(name);
 nvertex = size(vertex, 2);
 nface = size(faces, 2);
@@ -81,8 +76,8 @@ seed = 3159; % in-between
 seed = 1108;
 seed = 3617;
 seed = 10837;
-seed = 8730;
-seed = 1703; % trepass
+%seed = 8730;
+%seed = 1703; % trepass
 
 % Thresholds and Controls
 threshold1 = 0.6;         % local criterion for convexity/curvature (adjustable, and since both vectors are normalized, this threshold value is actually a theta angle that you can specify)
