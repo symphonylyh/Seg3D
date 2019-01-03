@@ -9,26 +9,34 @@
 % Filters-Selection-Small component selection-Delete selected faces and vertices
 
 %% Mesh Post-processing (Scale calibration)
-% How to get the real scale of scene in world units? 
+% Q1. How to get the real scale of scene in world units? 
 % Option 1: Measure the distance between two camera locations (either
 % manually or connect two cameras with know distance), then this distance
 % actually becomes a "virtual" calibration ruler
 % Option 2: Attach a motion sensor with camera that can record the moving distance between each photo
 
-%% Libraries related:
+% Q2. How to estimate the "percentage of shape completion" of a particle?
+% Option 1: poll on normal vector directions and fill a sphere surface (details in ground removal algorithm)
+% Option 2: surface/volume ratio
+
+%% Control panel
+% Libraries related:
 % Graph & Mesh: https://www.mathworks.com/matlabcentral/fileexchange/5355-toolbox-graph 
 % Queue/Stack (Cqueue.m:96 bug fix): https://www.mathworks.com/matlabcentral/fileexchange/28922-list-queue-stack
 addpath(genpath('toolbox_graph'));
 addpath(genpath('datastructure'));
 
-%% Control panel
 close all;
 name = 'clean_mesh';
-global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature;
+global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle;
 PLOT = true;
 PLOT_FIG = 1;
-    plot_mesh_original = 1;
-    plot_mesh_curvature = 1;
+    plot_mesh_original = 0;
+    plot_mesh_curvature = 0;
+    plot_mesh_raw = 0;
+    plot_mesh_clean = 0;
+    plot_mesh_optimized = 0;
+    plot_particle = 1;
 
 %% Read Mesh and Pre-compute Mesh Info
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors;
@@ -72,10 +80,11 @@ face_centers = (v1 + v2 + v3) / 3;
 
 fprintf('Pre-compute mesh: %f seconds\n', toc);
 
+% Clean workspace
 global_list = who('global');
 clearvars('-except', global_list{:});
 
-%% Display original mesh
+% Display original mesh
 if PLOT && plot_mesh_original
     face_colors = 0.3 * ones(nface, 1); % 0.3-red
     plot_face_color('Original Mesh', 0);
@@ -89,81 +98,62 @@ face_angles = compute_face_angle(K);
 face_angles = (face_angles - min(face_angles)) ./ (max(face_angles) - min(face_angles));
 fprintf('Compute face angle: %f seconds\n', toc);
 
-%% Display curvature mesh
+% Display curvature mesh
 if PLOT && plot_mesh_curvature
     face_colors = face_angles;
     plot_face_color('Curvature Mesh', 0);
 end
 
-%% Breadth-First Search Traversal
+%% Breadth-First Search Traversal (Curvature criterion)
+face_remain = logical(ones(nface, 1)); % 1-remain faces
+face_segmented = logical(zeros(nface, 1)); % 1-segmented faces
+object_no = 0; % total No. of particles segmented
+object_set = logical(zeros(nface, [])); % object_set(:,i) is all faces that belong to ith particle
+
+% Thresholds and Controls
+threshold = 0.8; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
+neighboring = 2; % 1-face neighboring (edge adjacency), 2-vertex neighboring (vertex adjacency)
+placeholder = 0; % BFS placeholder (a face index can never be 0 since Matlab is 1-based)
+failure = 0;     % failure times (when it keeps failing, meaning there is no more particles in the remaining mesh, exit the loop)
+
+tic
+% Iteratively segment particles from mesh
+% for i = 1 : 1 % Debug mode
+%   seed = XXX; % manual seeding
+while true % Release mode
+    
+% Stop sign (when remaining faces is less than certain percentage of total faces)    
+if sum(face_remain(:)) < 0.1 * nface || failure > 20
+    break;
+end
+
+% Seeding
+% Option 1: random seeding
+% Option 2: start from face with large convexity (thus more likely on object surface)
+% rng('shuffle'); % random seeding
+face_remain_idx = find(face_remain == 1);
+seed = face_remain_idx(randi(length(face_remain_idx))); % randomly start from one of the remain faces
+
+% Initialization
 % Label all faces into one of the following categories in array 'state':
 % Cat 0: Unvisited face (black-colored)
 % Cat 1: Object face    (red-colored)
 % Cat 2: Boundary face  (white-colored)
-state = zeros(size(faces, 2), 1); % array for recording face status: 0-unvisited face(black), 1-object face(red), 2-boundary face(white)
-q = CQueue();                     % queue for BFS, storing the face index, i.e. ith face. Any face that entered into this queue is labelled 'object face'.
-
-% Good seeds
-seed = 2400;
-% bad seed
-seed = 42885;
-rng('shuffle');
-%seed = randi(size(faces, 2));
-
-% clean_mesh, local jiayi = 0.8, face angle jiayi 3rd neighbors
-% good seed
-seed = 10767; % 4
-seed = 49500; % 5
-seed = 42885; % 15
-seed = 46018; % 7
-seed = 63104; % 3
-seed = 36193; % 17
-seed = 66780; % dabian
-% seed = 5620; % xiaobian
-% seed = 62000; % xiaoxiaobian
-% seed = 3674; % shuzhede
-
-% Thresholds and Controls
-threshold1 = 0.6;         % local criterion for convexity/curvature (adjustable, and since both vectors are normalized, this threshold value is actually a theta angle that you can specify)
-threshold2 = 0.15;         % global criterion for centroid facing (dynamically adjustable, this criteria doesn't start functioning much until a significant amount of object faces are identified b/c the calculated centroid rely on the current faces are sufficient to form a particle body)
-global_trigger = false;   % flag for start applying the global criterion
-global_trigger_val = 0;  % trigger 'center_change_ratio(%)' value for the global criterion. 10 means the center change drops below 10%, which shows stabilize
-% Deciding when to start applying global criterion is still vague:
-% maybe, developing a metric of "percentage of shape completion" can help, 
-% and will also help the later completion step; 
-% maybe, a surface/volume ratio metric can help; 
-% maybe, the sum/avg of perpendicular distance from centroid to all object faces can help
-neighboring = 1; % 1-face neighboring (edge adjacency), 2-vertex neighboring (vertex adjacency)
-
-% Initialize
-placeholder = 0; % BFS placeholder (a face index can never be 0 b/c Matlab is 1-based)
-% seed = randi(size(faces, 2)); % or push a random starting face index % TODO: what if the start face is a boundary face? during BFS we can add a check on all 3 adjacent faces (no matter visited or unvisited) and if the face contradicts with all adjacent faces, remove it from the object face set
+state = zeros(nface, 1); % array for recording face status: 0-unvisited face(black), 1-object face(red), 2-boundary face(white)
+state(face_segmented) = 1; % label already segmented faces as boundary
+q = CQueue();            % queue for BFS, storing the face index, i.e. ith face. Any face that entered into this queue is labelled 'object face'.
 q.push(seed); q.push(placeholder);
 state(seed) = 1; % label starting face as 'object'
-centroid = face_centers(:, seed); % initialize dynamic centroid as current face
-update_times = 0; % record times of centroid updates
-center_sum = zeros(3, 1); face_count = 0; % used for accumulating face coords between update loops
-center_change_sum = zeros(3, 1); % used for accumulating the denominator of the center change ratio
-% Dynamic centroid of all current object faces is updated asynchronously:
-% When in a normal loop, 'center_sum' accumulates every visited center coords; 'face_count' accumulates the count of object faces.
-% When in a placeholder loop, 'centroid' is updated by 'center_sum/face_count'
+update_times = 0; % record the times of a ring BFS
 
+% BFS
+% tic
 while q.isempty() ~= 1
     % Pop a face from the queue
     curr_id = q.pop();
     
-    % If a placeholder is met, update the current centroid; otherwise, just keep accumulating
+    % If a placeholder is met, increment the BFS loop count
     if curr_id == placeholder
-        if update_times > 0 % skip the first placeholder (centroid is just the starting seed face, no change)
-            centroid_old = centroid;
-            centroid = center_sum / face_count;
-            center_change_sum = center_change_sum + abs(centroid - centroid_old);
-            center_change_ratio = norm(centroid - centroid_old) / norm(center_change_sum) * 100;
-            center_change_ratios(update_times) = center_change_ratio; % 'center_change_ratios' records the change ratio at each update
-            if center_change_ratio < global_trigger_val
-                global_trigger = true; % trigger global criterion
-            end
-        end
         update_times = update_times + 1;
         if q.isempty() ~= 1
             q.push(placeholder); % if there are unvisited faces in queue, push the placeholder
@@ -172,13 +162,7 @@ while q.isempty() ~= 1
         end
         continue; % for placeholder step, just skip to the next loop after updating
     end
-    
-    % Accumulate the dynamic centroid
-    curr_normal = - face_normals(:, curr_id); % flip sign, now normal points to the interior of a particle
-    curr_center = face_centers(:, curr_id);
-    center_sum = center_sum + curr_center;
-    face_count = face_count + 1;
-    
+        
     % Label neighboring faces into object face (1) OR boundary face (2) 
     if neighboring == 1
         neighbors = face_rings{curr_id};
@@ -187,28 +171,15 @@ while q.isempty() ~= 1
     end
     for f = 1 : length(neighbors)
         adj_id = neighbors(f);
-        adj_normal = - face_normals(:, adj_id); % flip sign, now normal points to the interior of a particle
-        adj_center = face_centers(:, adj_id); 
         if state(adj_id) == 0 % skip all visited faces
-            % Criteria 1: Local curvature criteria (between a face and its adjacent faces)
-            local_center_diff = adj_center - curr_center;
-            local_center_diff = local_center_diff / norm(local_center_diff); % normalize
-            local_measure = dot(curr_normal, local_center_diff + adj_normal);
-            % Criteria 2: Global centroid criteria (between a face and the global centroid)
-            global_center_diff = adj_center - centroid;
-            global_measure = dot(adj_normal, global_center_diff); % Attempt 1: dot product without normalization
-            global_center_diff = global_center_diff / norm(global_center_diff);
-            global_measure = dot(-adj_normal, global_center_diff); % Attempt 2: projection (global_center_diff is normalized, so |b|*cos(theta) = projection, the threshold criteria is also essentially a theta angle)
-
-            if face_angles(adj_id) >= 0.8 && (global_trigger == false || global_measure > threshold2)
-            %if local_measure > threshold1 && (global_trigger == false || global_measure > threshold2) % if trigger is false, ignore the global criterion; otherwise check it
+            if face_angles(adj_id) >= threshold
                 % object face (push to queue)
                 state(adj_id) = 1;
                 q.push(adj_id); 
             else
                 % boundary face (do not push to queue, BFS ends at this face)
                 state(adj_id) = 2;
-                % label its adjacency as well
+                % label its adjacency as well (stricter criterion, may or may not need this)
                 if neighboring == 1
                     boundary_neighbors = face_rings{adj_id};
                 else
@@ -225,58 +196,45 @@ while q.isempty() ~= 1
     end
 end
 
-% Display raw mesh
-% Per-face coloring: Non-visited face-0 (black), object vertex-0.3 (red), boundary vertex-1.0 (white)
-% close all;
-% figure(2); 
-% title('Raw Mesh');
-% face_colors = zeros(size(faces, 2), 1);
-% objects = state == 1; face_colors(objects) = 0.3;
-% boundaries = state == 2; face_colors(boundaries) = 1.0;
-% DISPLAY_HHH = false;
-% if DISPLAY_HHH
-%     % My manual display settings
-%     h = patch('vertices',vertex','faces',faces','FaceVertexCData', face_colors, 'FaceColor', 'flat');
-%     lighting phong;
-%     camproj('perspective');
-%     axis square; 
-%     axis off;
-%     %cameramenu;
-%     cameratoolbar;
-%     axis tight;
-%     axis equal;
-%     shading faceted;
-%     colormap hot;
-%     caxis([0 1]); % fix colormap range
-%     camlight;
-% else
-%     % Use graph toolbox display settings
-%     options.face_vertex_color = face_colors;
-%     plot_mesh(vertex, faces, options);
-%     shading faceted; % or shading interp; % for display smooth surface
-%     colormap hot;
-%     caxis([0 1]); % fix colormap range
-% end
-% 
-% % Plot normal for a specific face index
-% hold on;
-% id = seed;
-% quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id), face_normals(2,id), face_normals(3,id), 'r'); % draw normal
+% fprintf('BFS: %f seconds\n', toc);
+fprintf('BFS completes at %d loops\n', update_times);
 
-% Mesh Cleaning by Detecting connected components in unvisited faces (BFS)
-state2 = zeros(size(faces, 2), 1);
-state2(state ~= 0) = 1; % 0-unvisited, 1-visited
+% Display raw mesh
+if PLOT && plot_mesh_raw
+    % Per-face coloring: Non-visited face-0 (black), object vertex-0.3 (red), boundary vertex-1.0 (white)
+    face_colors = zeros(nface, 1);
+    objects = state == 1; face_colors(objects) = 0.3;
+    boundaries = state == 2; face_colors(boundaries) = 1.0;
+    plot_face_color('Raw Mesh', 1);
+    % Label the seed location by plotting normal vector
+    hold on;
+    id = seed;
+    quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id)/4, face_normals(2,id)/4, face_normals(3,id)/4, 'r');
+end
+
+% Mesh cleaning by Detecting connected components in unvisited faces (BFS)
+% tic
+state2 = state ~= 0 & face_segmented == 0; % state ~= 0 collects all current visited faces, face_segmented == 0 collects all unvisited faces from last loop, so the intersection is the objects faces identified in the current loop
+if sum(state2(:)) < 0.01 * nface
+    % if only tiny regions are visited (most likely means an useless BFS),
+    % ignore them and skip the following mesh cleaning process
+    failure = failure + 1;
+    fprintf('BFS skip\n');
+    continue;
+end
+
 connect = 0; % No. of connected components
+component = {};
 while true
     unvisited = find(state2 == 0); % index of all unvisited faces
     if (length(unvisited) == 0) 
         break; % if no more unvisited faces, exit
     end
     starter = unvisited(randi(length(unvisited)));
-    face_set = zeros(size(faces, 2), 1);
     q.empty();
     q.push(starter);
     state2(starter) = 1;
+    face_set = zeros(nface, 1);
     face_set(starter) = 1; % don't forget!
     count = 0;
     while q.isempty() ~= 1
@@ -294,10 +252,16 @@ while true
     end
     connect = connect + 1;
     component{connect} = face_set; % component{i} is the logical face index array of the ith component
-    fprintf("Connected Component %d: %d faces, starter %d\n", connect, count, starter);
+    % fprintf('Connected Component %d: %d faces, starter %d\n', connect, count, starter);
 end
+fprintf('Total connected components: %d\n', connect); 
+% There are usually one big component (the unvisited west), several medium
+% components (they're unvisited regions on the object surface) and many tiny
+% components (with < 10 faces, they're small unvisited faces that are
+% trapped by a surrounding of boundary faces). What we need is the
+% complement of the big component.
 
-% Find the connected component that includes the most faces
+% Find the connected component that contains the max No. of faces
 max_set = 1;
 max_face = 0;
 for c = 1 : connect
@@ -308,23 +272,57 @@ for c = 1 : connect
 end
 
 % Clean the mesh by taking the complement of the largest component
-objects = component{max_set} == 0;
+objects = ~component{max_set};
 
 % Extract boundary faces from the cleaned mesh
-boundaries = boundary_extract(faces, objects);
+boundaries = boundary_extract(objects);
+
+% fprintf('Mesh cleaning: %f seconds\n', toc);
 
 % Display cleaned mesh
-figure(2), clf;
-title('Cleaned Mesh');
-face_colors = zeros(size(faces, 2), 1);
-face_colors(objects) = 0.3;
-face_colors(boundaries) = 1.0;
-options.face_vertex_color = face_colors;
-plot_mesh(vertex, faces, options);
-shading faceted;  
-colormap hot;
+if PLOT && plot_mesh_clean
+    face_colors = zeros(nface, 1);
+    face_colors(objects) = 0.3;
+    face_colors(boundaries) = 1.0;
+    plot_face_color('Cleaned Mesh', 1);
+end
 
-% Optimize boundary (shortcut)
+% Record successfully segmented particle faces
+face_remain(objects == 1) = 0;
+face_segmented(objects == 1) = 1;
+object_no = object_no + 1;
+object_set(:, object_no) = objects;
+fprintf('Segment out particle No.%d, %d faces\n', object_no, sum(objects(:)));
+failure = 0; % if a particle is successfully segmented, reset 'failure' count
+
+end
+
+fprintf('Segmentation: %f seconds\n', toc);
+
+%% Display segmented particle(s)
+% Particles on different figures
+% if PLOT && plot_particle 
+%     for i = 1 : object_no
+%         face_colors = zeros(nface, 1);
+%         face_colors(object_set(:, i)) = 0.3;
+%         plot_face_color(strcat('Particle ', num2str(i)), 1);
+%     end
+% end
+
+% Particles on one figure
+if PLOT && plot_particle
+    face_colors = zeros(nface, 1);
+    for i = 1 : object_no
+        face_colors(object_set(:, i)) = i / object_no; % better color option here using linspecer.m
+    end
+    plot_face_color(strcat('Particle ', num2str(i)), 0);
+    colormap jet;
+end
+
+%% Optimize boundary (shortest path)
+STOP = false;
+if STOP
+tic
 E_local = [];
 E_global = [];
 for i = 1 : length(boundaries)
@@ -384,15 +382,13 @@ for i = 1 : num_change
     end
 end
 
+fprintf('Optimize boundary: %f seconds\n', toc);
+
 % Display optimized mesh
-% Display optimized boundary
-figure(3);
-title('Optimized Mesh_0');
-face_colors = zeros(size(faces, 2), 1);
-face_colors(objects) = 0.3;
-face_colors(boundaries) = 1.0;
-options.face_vertex_color = face_colors;
-plot_mesh(vertex, faces, options);
-shading faceted;  
-colormap hot;
-caxis([0 1]);
+if PLOT && plot_mesh_optimized
+    face_colors = zeros(nface, 1);
+    face_colors(objects) = 0.3;
+    face_colors(boundaries) = 1.0;
+    plot_face_color('Optimized Mesh', 1);
+end
+end

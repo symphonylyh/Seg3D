@@ -1,22 +1,23 @@
-function boundary_face_idx = boundary_extract(faces, objects)
+function boundary_faces = boundary_extract(objects)
+global faces;
 % Extract the boundary faces of a given set of faces
 % Input:
-%   face_rings: connectivity of each face
-%   objects: a label array of the subset of target faces among all faces
-% Return:
-%   boundary: indices of a close boundary ring
-object_face_idx = find(objects == 1);
-object_faces = faces(:, object_face_idx);
-object_face_rings = compute_face_ring(object_faces);
+%   objects: 1 x F logical array of the target faces among all faces
+% Output:
+%   boundary_faces: an array of indices that forms a closed boundary ring
 
-boundary_face = zeros(size(object_faces, 2), 1);
-for f = 1 : length(object_face_rings)
+object_faces = find(objects == 1);
+object_face_rings = compute_face_ring(faces(:, object_faces)); % compute face ring on the subset object faces
+
+boundary_face = zeros(length(object_faces), 1);
+for f = 1 : length(object_faces)
     if length(object_face_rings{f}) < 3
         boundary_face(f) = 1;
     end
 end
-boundary_face_idx = object_face_idx(boundary_face == 1);
+boundary_faces = object_faces(boundary_face == 1);
 
+% old
 % DFS to reach the edge face
 % s = CStack();
 % starter = randi(size(object_faces, 2)); % random start

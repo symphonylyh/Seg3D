@@ -16,5 +16,12 @@ end
 if edge_visibility == 0
     p.LineStyle = 'none';
 end
+
+% Option 2: Use graph toolbox display settings
+% options.face_vertex_color = face_colors;
+% plot_mesh(vertex, faces, options);
+% shading faceted; % or shading interp; for display smooth surface
+% colormap hot;
+% caxis([0 1]); % fix colormap range
 end
 
