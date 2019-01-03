@@ -28,7 +28,7 @@ addpath(genpath('datastructure'));
 
 close all;
 name = 'clean_mesh';
-global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle;
+global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle plot_volume;
 PLOT = true;
 PLOT_FIG = 1;
     plot_mesh_original = 0;
@@ -36,7 +36,8 @@ PLOT_FIG = 1;
     plot_mesh_raw = 0;
     plot_mesh_clean = 0;
     plot_mesh_optimized = 0;
-    plot_particle = 1;
+    plot_particle = 0;
+    plot_volume = 1;
 
 %% Read Mesh and Pre-compute Mesh Info
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors;
@@ -318,6 +319,62 @@ if PLOT && plot_particle
     plot_face_color(strcat('Particle ', num2str(i)), 0);
     colormap jet;
 end
+
+%% Compute volume(s)
+volumes_raw = zeros(object_no, 1);
+particle_points{object_no} = [];
+% Particles on different figures
+% for i = 1 : object_no
+%     object_faces = faces(:, object_set(:,i));
+%     object_vertices = vertex(:, unique(object_faces(:)))';
+%     particle_points{i} = object_vertices;
+%     [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+%     % plot
+%     if PLOT && plot_volume
+%         figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
+%         title(strcat('Particle ', num2str(i)));
+%         subplot(1,2,1);
+%         scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+%         axis equal off;
+% 
+%         subplot(1,2,2);
+%         trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
+%         axis equal off;
+%     end
+% end
+
+% Particles subplotted on one figure
+if PLOT && plot_volume
+    figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
+    % Arrange subplots
+%     fig_row = 2 * round(sqrt(object_no));
+%     fig_col = 2 * ceil(object_no/(fig_row/2));
+    fig_row = ceil(object_no/2);
+    fig_col = 2 * 2;
+end
+for i = 1 : object_no
+    object_faces = faces(:, object_set(:,i));
+    object_vertices = vertex(:, unique(object_faces(:)))';
+    particle_points{i} = object_vertices;
+    
+    % Calculate volume encompassed by a set of points
+    % volume_raw(i) = volumeFromPoints(object_vertices);
+    [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+    
+    % plot
+    if PLOT && plot_volume
+        subplot(fig_row,fig_col,2*i-1);
+        scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+        axis equal off;
+
+        subplot(fig_row,fig_col,2*i);
+        trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
+        axis equal off;
+    end
+end
+
+% Cache
+% save('particles.mat', 'particle_points');
 
 %% Optimize boundary (shortest path)
 STOP = false;
