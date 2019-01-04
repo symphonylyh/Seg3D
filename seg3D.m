@@ -36,8 +36,8 @@ PLOT_FIG = 1;
     plot_mesh_raw = 0;
     plot_mesh_clean = 0;
     plot_mesh_optimized = 0;
-    plot_particle = 0;
-    plot_volume = 1;
+    plot_particle = 1;
+    plot_volume = 0;
 
 %% Read Mesh and Pre-compute Mesh Info
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors;
@@ -106,199 +106,250 @@ if PLOT && plot_mesh_curvature
 end
 
 %% Breadth-First Search Traversal (Curvature criterion)
-face_remain = logical(ones(nface, 1)); % 1-remain faces
-face_segmented = logical(zeros(nface, 1)); % 1-segmented faces
-object_no = 0; % total No. of particles segmented
-object_set = logical(zeros(nface, [])); % object_set(:,i) is all faces that belong to ith particle
-
-% Thresholds and Controls
-threshold = 0.8; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
-neighboring = 2; % 1-face neighboring (edge adjacency), 2-vertex neighboring (vertex adjacency)
-placeholder = 0; % BFS placeholder (a face index can never be 0 since Matlab is 1-based)
-failure = 0;     % failure times (when it keeps failing, meaning there is no more particles in the remaining mesh, exit the loop)
-
-tic
-% Iteratively segment particles from mesh
-% for i = 1 : 1 % Debug mode
-%   seed = XXX; % manual seeding
-while true % Release mode
-    
-% Stop sign (when remaining faces is less than certain percentage of total faces)    
-if sum(face_remain(:)) < 0.1 * nface || failure > 20
-    break;
+% Dynamic thresholding
+threshold = 0.7; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
+increment = 0.01;
+INCREMENT = true;
+if INCREMENT
+    fprintf('Incremental mode...\n');
+else
+    fprintf('Non-Incremental mode...\n');
 end
-
-% Seeding
-% Option 1: random seeding
-% Option 2: start from face with large convexity (thus more likely on object surface)
-% rng('shuffle'); % random seeding
-face_remain_idx = find(face_remain == 1);
-seed = face_remain_idx(randi(length(face_remain_idx))); % randomly start from one of the remain faces
-
-% Initialization
-% Label all faces into one of the following categories in array 'state':
-% Cat 0: Unvisited face (black-colored)
-% Cat 1: Object face    (red-colored)
-% Cat 2: Boundary face  (white-colored)
-state = zeros(nface, 1); % array for recording face status: 0-unvisited face(black), 1-object face(red), 2-boundary face(white)
-state(face_segmented) = 1; % label already segmented faces as boundary
-q = CQueue();            % queue for BFS, storing the face index, i.e. ith face. Any face that entered into this queue is labelled 'object face'.
-q.push(seed); q.push(placeholder);
-state(seed) = 1; % label starting face as 'object'
-update_times = 0; % record the times of a ring BFS
-
-% BFS
-% tic
-while q.isempty() ~= 1
-    % Pop a face from the queue
-    curr_id = q.pop();
+max_faces = 0;
+max_objects = 0;
+optimal_threshold = threshold; % cache optimal results
+optimal_object_no = 0;
+optimal_object_set = logical(zeros(nface, []));
+while true
+    face_remain = logical(ones(nface, 1)); % 1-remain faces
+    face_segmented = logical(zeros(nface, 1)); % 1-segmented faces
+    object_no = 0; % total No. of particles segmented
+    object_set = logical(zeros(nface, [])); % object_set(:,i) is all faces that belong to ith particle
     
-    % If a placeholder is met, increment the BFS loop count
-    if curr_id == placeholder
-        update_times = update_times + 1;
-        if q.isempty() ~= 1
-            q.push(placeholder); % if there are unvisited faces in queue, push the placeholder
-        else
-            break; % otherwise, this placeholder is the last element, exit (otherwise you will infinite loop)
-        end
-        continue; % for placeholder step, just skip to the next loop after updating
+    % Thresholds and Controls
+    neighboring = 2; % 1-face neighboring (edge adjacency), 2-vertex neighboring (vertex adjacency)
+    placeholder = 0; % BFS placeholder (a face index can never be 0 since Matlab is 1-based)
+    failure = 0;     % failure times (when it keeps failing, meaning there is no more particles in the remaining mesh, exit the loop)
+    
+    tic
+    % Iteratively segment particles from mesh
+    % for i = 1 : 1 % Debug mode (one particle at a time)
+    %   seed = XXX; % manual seeding
+    while true % Release mode (all particles at a time)
+
+    % Stop sign (when remaining faces is less than certain percentage of total faces)    
+    if sum(face_remain(:)) < 0.1 * nface || failure > 20
+        break;
     end
-        
-    % Label neighboring faces into object face (1) OR boundary face (2) 
-    if neighboring == 1
-        neighbors = face_rings{curr_id};
-    else
-        neighbors = vertex_rings{curr_id};
-    end
-    for f = 1 : length(neighbors)
-        adj_id = neighbors(f);
-        if state(adj_id) == 0 % skip all visited faces
-            if face_angles(adj_id) >= threshold
-                % object face (push to queue)
-                state(adj_id) = 1;
-                q.push(adj_id); 
+
+    % Seeding
+    % Option 1: random seeding
+    % rng('shuffle'); % random seeding
+    face_remain_idx = find(face_remain == 1);
+    seed = face_remain_idx(randi(length(face_remain_idx))); % randomly start from one of the remain faces
+    % Option 2: start from face with large convexity (thus more likely on
+    % object surface), Caveat: some incomplete particle may not have convex
+    % faces. It's evil (missing particles), and it's good (pre-filter
+    % incomplete particles for us, and more stable)
+    [~, idx] = max(face_angles(face_remain_idx));
+    seed = face_remain_idx(idx);
+    
+    % Initialization
+    % Label all faces into one of the following categories in array 'state':
+    % Cat 0: Unvisited face (black-colored)
+    % Cat 1: Object face    (red-colored)
+    % Cat 2: Boundary face  (white-colored)
+    state = zeros(nface, 1); % array for recording face status: 0-unvisited face(black), 1-object face(red), 2-boundary face(white)
+    state(face_segmented) = 1; % label already segmented faces as boundary
+    q = CQueue();            % queue for BFS, storing the face index, i.e. ith face. Any face that entered into this queue is labelled 'object face'.
+    q.push(seed); q.push(placeholder);
+    state(seed) = 1; % label starting face as 'object'
+    update_times = 0; % record the times of a ring BFS
+
+    % BFS
+    % tic
+    while q.isempty() ~= 1
+        % Pop a face from the queue
+        curr_id = q.pop();
+
+        % If a placeholder is met, increment the BFS loop count
+        if curr_id == placeholder
+            update_times = update_times + 1;
+            if q.isempty() ~= 1
+                q.push(placeholder); % if there are unvisited faces in queue, push the placeholder
             else
-                % boundary face (do not push to queue, BFS ends at this face)
-                state(adj_id) = 2;
-                % label its adjacency as well (stricter criterion, may or may not need this)
-                if neighboring == 1
-                    boundary_neighbors = face_rings{adj_id};
+                break; % otherwise, this placeholder is the last element, exit (otherwise you will infinite loop)
+            end
+            continue; % for placeholder step, just skip to the next loop after updating
+        end
+
+        % Label neighboring faces into object face (1) OR boundary face (2) 
+        if neighboring == 1
+            neighbors = face_rings{curr_id};
+        else
+            neighbors = vertex_rings{curr_id};
+        end
+        for f = 1 : length(neighbors)
+            adj_id = neighbors(f);
+            if state(adj_id) == 0 % skip all visited faces
+                if face_angles(adj_id) >= threshold
+                    % object face (push to queue)
+                    state(adj_id) = 1;
+                    q.push(adj_id); 
                 else
-                    boundary_neighbors = vertex_rings{adj_id};
-                end
-                for b = 1 : length(boundary_neighbors)
-                    boundary_id = boundary_neighbors(b);
-                    if state(boundary_id) == 0
-                        state(boundary_id) = 2;
+                    % boundary face (do not push to queue, BFS ends at this face)
+                    state(adj_id) = 2;
+                    % label its adjacency as well (stricter criterion, may or may not need this)
+                    if neighboring == 1
+                        boundary_neighbors = face_rings{adj_id};
+                    else
+                        boundary_neighbors = vertex_rings{adj_id};
+                    end
+                    for b = 1 : length(boundary_neighbors)
+                        boundary_id = boundary_neighbors(b);
+                        if state(boundary_id) == 0
+                            state(boundary_id) = 2;
+                        end
                     end
                 end
             end
         end
     end
-end
 
-% fprintf('BFS: %f seconds\n', toc);
-fprintf('BFS completes at %d loops\n', update_times);
+    % fprintf('BFS: %f seconds\n', toc);
+    % fprintf('BFS completes at %d loops\n', update_times);
 
-% Display raw mesh
-if PLOT && plot_mesh_raw
-    % Per-face coloring: Non-visited face-0 (black), object vertex-0.3 (red), boundary vertex-1.0 (white)
-    face_colors = zeros(nface, 1);
-    objects = state == 1; face_colors(objects) = 0.3;
-    boundaries = state == 2; face_colors(boundaries) = 1.0;
-    plot_face_color('Raw Mesh', 1);
-    % Label the seed location by plotting normal vector
-    hold on;
-    id = seed;
-    quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id)/4, face_normals(2,id)/4, face_normals(3,id)/4, 'r');
-end
-
-% Mesh cleaning by Detecting connected components in unvisited faces (BFS)
-% tic
-state2 = state ~= 0 & face_segmented == 0; % state ~= 0 collects all current visited faces, face_segmented == 0 collects all unvisited faces from last loop, so the intersection is the objects faces identified in the current loop
-if sum(state2(:)) < 0.01 * nface
-    % if only tiny regions are visited (most likely means an useless BFS),
-    % ignore them and skip the following mesh cleaning process
-    failure = failure + 1;
-    fprintf('BFS skip\n');
-    continue;
-end
-
-connect = 0; % No. of connected components
-component = {};
-while true
-    unvisited = find(state2 == 0); % index of all unvisited faces
-    if (length(unvisited) == 0) 
-        break; % if no more unvisited faces, exit
+    % Display raw mesh
+    if PLOT && plot_mesh_raw
+        % Per-face coloring: Non-visited face-0 (black), object vertex-0.3 (red), boundary vertex-1.0 (white)
+        face_colors = zeros(nface, 1);
+        objects = state == 1; face_colors(objects) = 0.3;
+        boundaries = state == 2; face_colors(boundaries) = 1.0;
+        plot_face_color('Raw Mesh', 1);
+        % Label the seed location by plotting normal vector
+        hold on;
+        id = seed;
+        quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id)/4, face_normals(2,id)/4, face_normals(3,id)/4, 'r');
     end
-    starter = unvisited(randi(length(unvisited)));
-    q.empty();
-    q.push(starter);
-    state2(starter) = 1;
-    face_set = zeros(nface, 1);
-    face_set(starter) = 1; % don't forget!
-    count = 0;
-    while q.isempty() ~= 1
-        curr_id = q.pop();
-        count = count + 1;
-        neighbors = face_rings{curr_id};
-        for f = 1 : length(neighbors)
-            adj_id = neighbors(f);
-            if state2(adj_id) == 0
-                state2(adj_id) = 1;
-                face_set(adj_id) = 1;
-                q.push(adj_id);
+
+    % Mesh cleaning by Detecting connected components in unvisited faces (BFS)
+    % tic
+    state2 = state ~= 0; % & face_segmented == 0; % state ~= 0 collects all current visited faces, face_segmented == 0 collects all unvisited faces from last loop, so the intersection is the objects faces identified in the current loop
+    % previous BUG here (fixed): if I remove the face_segmented part here,
+    % the complement step below may result in an overlapped portion
+    % including the already-segmented part. Should take the intersect when
+    % this clean mesh step is completed.
+    state_new = state ~= 0 & face_segmented == 0; % the newly traversed faces (before cleaning), this is what we should apply the 0.01 criterion (tiny regions) to
+    if sum(state_new(:)) < 0.01 * nface
+        % if only tiny regions are visited (most likely means an useless BFS),
+        % ignore them and skip the following mesh cleaning process
+        failure = failure + 1;
+        % fprintf('BFS skip\n');
+        continue;
+    end
+
+    connect = 0; % No. of connected components
+    component = {};
+    while true
+        unvisited = find(state2 == 0); % index of all unvisited faces
+        if (length(unvisited) == 0) 
+            break; % if no more unvisited faces, exit
+        end
+        starter = unvisited(randi(length(unvisited)));
+        q.empty();
+        q.push(starter);
+        state2(starter) = 1;
+        face_set = zeros(nface, 1);
+        face_set(starter) = 1; % don't forget!
+        count = 0;
+        while q.isempty() ~= 1
+            curr_id = q.pop();
+            count = count + 1;
+            neighbors = face_rings{curr_id};
+            for f = 1 : length(neighbors)
+                adj_id = neighbors(f);
+                if state2(adj_id) == 0
+                    state2(adj_id) = 1;
+                    face_set(adj_id) = 1;
+                    q.push(adj_id);
+                end
             end
         end
+        connect = connect + 1;
+        component{connect} = face_set; % component{i} is the logical face index array of the ith component
+        % fprintf('Connected Component %d: %d faces, starter %d\n', connect, count, starter);
     end
-    connect = connect + 1;
-    component{connect} = face_set; % component{i} is the logical face index array of the ith component
-    % fprintf('Connected Component %d: %d faces, starter %d\n', connect, count, starter);
-end
-fprintf('Total connected components: %d\n', connect); 
-% There are usually one big component (the unvisited west), several medium
-% components (they're unvisited regions on the object surface) and many tiny
-% components (with < 10 faces, they're small unvisited faces that are
-% trapped by a surrounding of boundary faces). What we need is the
-% complement of the big component.
+    % fprintf('Total connected components: %d\n', connect); 
+    % There are usually one big component (the unvisited west), several medium
+    % components (they're unvisited regions on the object surface) and many tiny
+    % components (with < 10 faces, they're small unvisited faces that are
+    % trapped by a surrounding of boundary faces). What we need is the
+    % complement of the big component.
 
-% Find the connected component that contains the max No. of faces
-max_set = 1;
-max_face = 0;
-for c = 1 : connect
-    if length(component{c}) > max_face
-        max_set = c;
-        max_face = length(component{c});
+    % Find the connected component that contains the max No. of faces
+    max_set = 1;
+    max_face = 0;
+    for c = 1 : connect
+        if length(component{c}) > max_face
+            max_set = c;
+            max_face = length(component{c});
+        end
     end
+
+    % Clean the mesh by taking the complement of the largest component
+    objects = ~component{max_set} & face_segmented == 0; % bug fix
+
+    % Extract boundary faces from the cleaned mesh
+    boundaries = boundary_extract(objects);
+
+    % fprintf('Mesh cleaning: %f seconds\n', toc);
+
+    % Display cleaned mesh
+    if PLOT && plot_mesh_clean
+        face_colors = zeros(nface, 1);
+        face_colors(objects) = 0.3;
+        face_colors(boundaries) = 1.0;
+        plot_face_color('Cleaned Mesh', 1);
+    end
+
+    % Record successfully segmented particle faces
+    face_remain(objects == 1) = 0;
+    face_segmented(objects == 1) = 1;
+    object_no = object_no + 1;
+    object_set(:, object_no) = objects;
+    % fprintf('Segment out particle No.%d, %d faces\n', object_no, sum(objects(:)));
+    failure = 0; % if a particle is successfully segmented, reset 'failure' count
+
+    end
+
+    % fprintf('Segmentation: %f seconds\n', toc);
+
+    if INCREMENT == false
+        break; % non incremental mode
+    end
+
+    if sum(object_set(:)) > max_faces
+        max_faces = sum(object_set(:));
+    end
+    if object_no > max_objects
+        max_objects = object_no;
+        optimal_threshold = threshold;
+        optimal_object_no = object_no;
+        optimal_object_set = object_set;
+    end
+    if sum(object_set(:)) < 0.88 * max_faces
+        break;
+    end
+    
+    fprintf('Total objects: %d, Total faces: %d\n', object_no, sum(object_set(:)));
+    threshold = threshold + increment;
+
 end
 
-% Clean the mesh by taking the complement of the largest component
-objects = ~component{max_set};
+fprintf('Best threshold found at %f.Task completed!\n', optimal_threshold);
 
-% Extract boundary faces from the cleaned mesh
-boundaries = boundary_extract(objects);
-
-% fprintf('Mesh cleaning: %f seconds\n', toc);
-
-% Display cleaned mesh
-if PLOT && plot_mesh_clean
-    face_colors = zeros(nface, 1);
-    face_colors(objects) = 0.3;
-    face_colors(boundaries) = 1.0;
-    plot_face_color('Cleaned Mesh', 1);
-end
-
-% Record successfully segmented particle faces
-face_remain(objects == 1) = 0;
-face_segmented(objects == 1) = 1;
-object_no = object_no + 1;
-object_set(:, object_no) = objects;
-fprintf('Segment out particle No.%d, %d faces\n', object_no, sum(objects(:)));
-failure = 0; % if a particle is successfully segmented, reset 'failure' count
-
-end
-
-fprintf('Segmentation: %f seconds\n', toc);
+object_no = optimal_object_no;
+object_set = optimal_object_set;
 
 %% Display segmented particle(s)
 % Particles on different figures
@@ -320,6 +371,7 @@ if PLOT && plot_particle
     colormap jet;
 end
 
+%seed = 66828;
 %% Compute volume(s)
 volumes_raw = zeros(object_no, 1);
 particle_points{object_no} = [];
