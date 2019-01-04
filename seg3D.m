@@ -133,7 +133,7 @@ while true
     
     tic
     % Iteratively segment particles from mesh
-    % for i = 1 : 1 % Debug mode (one particle at a time)
+    % for x = 1 : 1 % Debug mode (one particle at a time)
     %   seed = XXX; % manual seeding
     while true % Release mode (all particles at a time)
 
@@ -298,7 +298,7 @@ while true
 
     % Clean the mesh by taking the complement of the largest component
     objects = ~component{max_set} & face_segmented == 0; % bug fix
-
+    
     % Extract boundary faces from the cleaned mesh
     boundaries = boundary_extract(objects);
 
@@ -337,21 +337,24 @@ while true
         optimal_object_no = object_no;
         optimal_object_set = object_set;
     end
-    if sum(object_set(:)) < 0.88 * max_faces
+    if sum(object_set(:)) < 0.8 * max_faces
         break;
     end
     
-    fprintf('Total objects: %d, Total faces: %d\n', object_no, sum(object_set(:)));
+    fprintf('Total objects: %d, Total faces: %d, Threshold: %f\n', object_no, sum(object_set(:)), threshold);
     threshold = threshold + increment;
 
 end
 
-fprintf('Best threshold found at %f.Task completed!\n', optimal_threshold);
+if INCREMENT
+    fprintf('Best threshold found at %f.Task completed!\n', optimal_threshold);
+    object_no = optimal_object_no;
+    object_set = optimal_object_set;
+else
+    fprintf('Fix threshold at %f. Task completed!\n', threshold);
+end
 
-object_no = optimal_object_no;
-object_set = optimal_object_set;
-
-%% Display segmented particle(s)
+% Display segmented particle(s)
 % Particles on different figures
 % if PLOT && plot_particle 
 %     for i = 1 : object_no
@@ -361,6 +364,7 @@ object_set = optimal_object_set;
 %     end
 % end
 
+close all;
 % Particles on one figure
 if PLOT && plot_particle
     face_colors = zeros(nface, 1);
@@ -371,7 +375,6 @@ if PLOT && plot_particle
     colormap jet;
 end
 
-%seed = 66828;
 %% Compute volume(s)
 volumes_raw = zeros(object_no, 1);
 particle_points{object_no} = [];
@@ -396,34 +399,34 @@ particle_points{object_no} = [];
 % end
 
 % Particles subplotted on one figure
-if PLOT && plot_volume
-    figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
-    % Arrange subplots
-%     fig_row = 2 * round(sqrt(object_no));
-%     fig_col = 2 * ceil(object_no/(fig_row/2));
-    fig_row = ceil(object_no/2);
-    fig_col = 2 * 2;
-end
-for i = 1 : object_no
-    object_faces = faces(:, object_set(:,i));
-    object_vertices = vertex(:, unique(object_faces(:)))';
-    particle_points{i} = object_vertices;
-    
-    % Calculate volume encompassed by a set of points
-    % volume_raw(i) = volumeFromPoints(object_vertices);
-    [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-    
-    % plot
-    if PLOT && plot_volume
-        subplot(fig_row,fig_col,2*i-1);
-        scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-        axis equal off;
-
-        subplot(fig_row,fig_col,2*i);
-        trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
-        axis equal off;
-    end
-end
+% if PLOT && plot_volume
+%     figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
+%     % Arrange subplots
+% %     fig_row = 2 * round(sqrt(object_no));
+% %     fig_col = 2 * ceil(object_no/(fig_row/2));
+%     fig_row = ceil(object_no/2);
+%     fig_col = 2 * 2;
+% end
+% for i = 1 : object_no
+%     object_faces = faces(:, object_set(:,i));
+%     object_vertices = vertex(:, unique(object_faces(:)))';
+%     particle_points{i} = object_vertices;
+%     
+%     % Calculate volume encompassed by a set of points
+%     % volume_raw(i) = volumeFromPoints(object_vertices);
+%     [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+%     
+%     % plot
+%     if PLOT && plot_volume
+%         subplot(fig_row,fig_col,2*i-1);
+%         scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+%         axis equal off;
+% 
+%         subplot(fig_row,fig_col,2*i);
+%         trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
+%         axis equal off;
+%     end
+% end
 
 % Cache
 % save('particles.mat', 'particle_points');
