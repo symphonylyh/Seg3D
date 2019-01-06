@@ -96,7 +96,10 @@ tic
 global face_angles;
 K = 3; % order of neighbor search ring
 face_angles = compute_face_angle(K);
-face_angles = (face_angles - min(face_angles)) ./ (max(face_angles) - min(face_angles));
+% larger = face_angles > t;
+% sum(larger(:))/length(face_angles) 
+% jiayi *1.1 is wanmei number! can be used to compute the 0.9 constant
+%face_angles = (face_angles - min(face_angles)) ./ (max(face_angles) - min(face_angles));
 fprintf('Compute face angle: %f seconds\n', toc);
 
 % Display curvature mesh
@@ -151,9 +154,9 @@ while true
     % object surface), Caveat: some incomplete particle may not have convex
     % faces. It's evil (missing particles), and it's good (pre-filter
     % incomplete particles for us, and more stable)
-    [~, idx] = max(face_angles(face_remain_idx));
-    seed = face_remain_idx(idx);
-    
+    [~, idx] = maxk(face_angles(face_remain_idx), round(0.1 * length(face_remain_idx)));
+    seed = face_remain_idx(idx(randi(length(idx))));
+
     % Initialization
     % Label all faces into one of the following categories in array 'state':
     % Cat 0: Unvisited face (black-colored)
@@ -234,7 +237,7 @@ while true
 
     % Mesh cleaning by Detecting connected components in unvisited faces (BFS)
     % tic
-    state2 = state ~= 0; % & face_segmented == 0; % state ~= 0 collects all current visited faces, face_segmented == 0 collects all unvisited faces from last loop, so the intersection is the objects faces identified in the current loop
+    state2 = state ~= 0 & face_segmented == 0; % state ~= 0 collects all current visited faces, face_segmented == 0 collects all unvisited faces from last loop, so the intersection is the objects faces identified in the current loop
     % previous BUG here (fixed): if I remove the face_segmented part here,
     % the complement step below may result in an overlapped portion
     % including the already-segmented part. Should take the intersect when
@@ -255,7 +258,7 @@ while true
         if (length(unvisited) == 0) 
             break; % if no more unvisited faces, exit
         end
-        starter = unvisited(randi(length(unvisited)));
+        starter = unvisited(round(max(length(unvisited))/2+min(length(unvisited))/2));
         q.empty();
         q.push(starter);
         state2(starter) = 1;
@@ -265,7 +268,11 @@ while true
         while q.isempty() ~= 1
             curr_id = q.pop();
             count = count + 1;
-            neighbors = face_rings{curr_id};
+            if neighboring == 1
+                neighbors = face_rings{curr_id};
+            else
+                neighbors = vertex_rings{curr_id};
+            end
             for f = 1 : length(neighbors)
                 adj_id = neighbors(f);
                 if state2(adj_id) == 0
@@ -337,11 +344,13 @@ while true
         optimal_object_no = object_no;
         optimal_object_set = object_set;
     end
-    if sum(object_set(:)) < 0.8 * max_faces
+    
+    fprintf('Total objects: %d, Total faces: %d, Threshold: %f\n', object_no, sum(object_set(:)), threshold);
+    
+    if sum(object_set(:)) < 0.9 * max_faces
         break;
     end
     
-    fprintf('Total objects: %d, Total faces: %d, Threshold: %f\n', object_no, sum(object_set(:)), threshold);
     threshold = threshold + increment;
 
 end
@@ -354,7 +363,7 @@ else
     fprintf('Fix threshold at %f. Task completed!\n', threshold);
 end
 
-% Display segmented particle(s)
+%% Display segmented particle(s)
 % Particles on different figures
 % if PLOT && plot_particle 
 %     for i = 1 : object_no
@@ -364,7 +373,6 @@ end
 %     end
 % end
 
-close all;
 % Particles on one figure
 if PLOT && plot_particle
     face_colors = zeros(nface, 1);
