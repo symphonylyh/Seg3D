@@ -8,6 +8,11 @@
 % Filters-Selection-Select faces with edge longer than...-Delete selected faces and vertices
 % Filters-Selection-Small component selection-Delete selected faces and vertices
 
+% OR use Voronoi filtering:
+% Filters-Remeshing, Simplification and Reconstruction-Voronoi Filtering
+% Compute normals for point sets
+% export as .ply format and preserve the normals, and use readply in MATLAB
+
 %% Mesh Post-processing (Scale calibration)
 % Q1. How to get the real scale of scene in world units? 
 % Option 1: Measure the distance between two camera locations (either
@@ -87,7 +92,7 @@ clearvars('-except', global_list{:});
 
 % Display original mesh
 if PLOT && plot_mesh_original
-    face_colors = 0.3 * ones(nface, 1); % 0.3-red
+    face_colors = ones(nface, 1);
     plot_face_color('Original Mesh', 0);
 end
 
@@ -99,7 +104,7 @@ face_angles = compute_face_angle(K);
 % larger = face_angles > t;
 % sum(larger(:))/length(face_angles) 
 % jiayi *1.1 is wanmei number! can be used to compute the 0.9 constant
-%face_angles = (face_angles - min(face_angles)) ./ (max(face_angles) - min(face_angles));
+face_angles = (face_angles - min(face_angles)) ./ (max(face_angles) - min(face_angles));
 fprintf('Compute face angle: %f seconds\n', toc);
 
 % Display curvature mesh
@@ -112,7 +117,7 @@ end
 % Dynamic thresholding
 threshold = 0.7; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
 increment = 0.01;
-INCREMENT = true;
+INCREMENT = false;
 if INCREMENT
     fprintf('Incremental mode...\n');
 else
