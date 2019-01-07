@@ -1,29 +1,3 @@
-%% Mesh Pre-processing (MeshLab)
-% Simpify point cloud:
-% Filters-Cleaning and Repairing-Merge Close Vertices
-% Filters-Sampling-Point Cloud Simplification-Number of Samples: 100000 OR Filters-Sampling-Poisson-disk sampling-Toggle Base mesh subsampling, Number of Samples: 100000
-% Surface reconstruction:
-% Filters-Remeshing, Simplification and Reconstruction-Screened Poisson Surface Reconstruction
-% Clean mesh:
-% Filters-Selection-Select faces with edge longer than...-Delete selected faces and vertices
-% Filters-Selection-Small component selection-Delete selected faces and vertices
-
-% OR use Voronoi filtering:
-% Filters-Remeshing, Simplification and Reconstruction-Voronoi Filtering
-% Compute normals for point sets
-% export as .ply format and preserve the normals, and use readply in MATLAB
-
-%% Mesh Post-processing (Scale calibration)
-% Q1. How to get the real scale of scene in world units? 
-% Option 1: Measure the distance between two camera locations (either
-% manually or connect two cameras with know distance), then this distance
-% actually becomes a "virtual" calibration ruler
-% Option 2: Attach a motion sensor with camera that can record the moving distance between each photo
-
-% Q2. How to estimate the "percentage of shape completion" of a particle?
-% Option 1: poll on normal vector directions and fill a sphere surface (details in ground removal algorithm)
-% Option 2: surface/volume ratio
-
 %% Control panel
 % Libraries related:
 % Graph & Mesh: https://www.mathworks.com/matlabcentral/fileexchange/5355-toolbox-graph 
@@ -33,16 +7,18 @@ addpath(genpath('datastructure'));
 
 close all;
 name = 'clean_mesh';
+% name = '01_06_2019_01';
+name = 'multiple_01';
 global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle plot_volume;
 PLOT = true;
 PLOT_FIG = 1;
-    plot_mesh_original = 0;
-    plot_mesh_curvature = 0;
+    plot_mesh_original = 1;
+    plot_mesh_curvature = 1;
     plot_mesh_raw = 0;
     plot_mesh_clean = 0;
     plot_mesh_optimized = 0;
     plot_particle = 1;
-    plot_volume = 0;
+    plot_volume = 1;
 
 %% Read Mesh and Pre-compute Mesh Info
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors;
@@ -115,7 +91,7 @@ end
 
 %% Breadth-First Search Traversal (Curvature criterion)
 % Dynamic thresholding
-threshold = 0.7; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
+threshold = 0.8; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
 increment = 0.01;
 INCREMENT = false;
 if INCREMENT
@@ -392,24 +368,24 @@ end
 volumes_raw = zeros(object_no, 1);
 particle_points{object_no} = [];
 % Particles on different figures
-% for i = 1 : object_no
-%     object_faces = faces(:, object_set(:,i));
-%     object_vertices = vertex(:, unique(object_faces(:)))';
-%     particle_points{i} = object_vertices;
-%     [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-%     % plot
-%     if PLOT && plot_volume
-%         figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
-%         title(strcat('Particle ', num2str(i)));
-%         subplot(1,2,1);
-%         scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-%         axis equal off;
-% 
-%         subplot(1,2,2);
-%         trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
-%         axis equal off;
-%     end
-% end
+for i = 1 : object_no
+    object_faces = faces(:, object_set(:,i));
+    object_vertices = vertex(:, unique(object_faces(:)))';
+    particle_points{i} = object_vertices;
+    [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3), 0.12);
+    % plot
+    if PLOT && plot_volume
+        figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
+        title(strcat('Particle ', num2str(i)));
+        subplot(1,2,1);
+        scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+        axis equal off;
+
+        subplot(1,2,2);
+        trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
+        axis equal off;
+    end
+end
 
 % Particles subplotted on one figure
 % if PLOT && plot_volume

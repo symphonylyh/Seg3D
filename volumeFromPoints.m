@@ -12,7 +12,7 @@ function v = volumeFromPoints(points)
 % MATLAB function does for us, the other is how to manually calculate it.
 % For method 1: Built-in convexHull() OR summing up volume of tetrahedrons.
 % For method 2: Built-in boundary()'s alphaShape OR Gauss's divergence theorem (for closed surface mesh ONLY).
-method = 2;
+method = 1;
 
 % Method 1
 if method == 1
@@ -24,22 +24,22 @@ if method == 1
     trisurf(C,DT.Points(:,1),DT.Points(:,2),DT.Points(:,3),'Facecolor','red','FaceAlpha',0.1);
     axis equal;
 % Manual calculation (very slow)
-    vol = 0; area = 0;
-    for t = 1 : length(DT.ConnectivityList) % each one in the connectivity list is a tetrahedron
-        indices = DT.ConnectivityList(t, :);
-        V1 = DT.Points(indices(1), :);
-        V2 = DT.Points(indices(2), :);
-        V3 = DT.Points(indices(3), :);
-        V4 = DT.Points(indices(4), :);
-        % Calculate volume and area of a tetrahedron
-        V = 1/6 * abs(dot(cross(V2-V1,V3-V1),V4-V1));
-        A123 = 1/2 * norm(cross(V2-V1,V3-V1));
-        A124 = 1/2 * norm(cross(V2-V1,V4-V1));
-        A134 = 1/2 * norm(cross(V3-V1,V4-V1));
-        A234 = 1/2 * norm(cross(V3-V2,V4-V2));
-        vol = vol + V;
-        area = area + A123 + A124 + A134 + A234;
-    end
+%     vol = 0; area = 0;
+%     for t = 1 : length(DT.ConnectivityList) % each one in the connectivity list is a tetrahedron
+%         indices = DT.ConnectivityList(t, :);
+%         V1 = DT.Points(indices(1), :);
+%         V2 = DT.Points(indices(2), :);
+%         V3 = DT.Points(indices(3), :);
+%         V4 = DT.Points(indices(4), :);
+%         % Calculate volume and area of a tetrahedron
+%         V = 1/6 * abs(dot(cross(V2-V1,V3-V1),V4-V1));
+%         A123 = 1/2 * norm(cross(V2-V1,V3-V1));
+%         A124 = 1/2 * norm(cross(V2-V1,V4-V1));
+%         A134 = 1/2 * norm(cross(V3-V1,V4-V1));
+%         A234 = 1/2 * norm(cross(V3-V2,V4-V2));
+%         vol = vol + V;
+%         area = area + A123 + A124 + A134 + A234;
+%     end
 % v == vol can be verified
 end
 
