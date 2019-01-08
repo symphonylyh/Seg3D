@@ -7,13 +7,12 @@ addpath(genpath('datastructure'));
 
 close all;
 name = 'clean_mesh';
-% name = '01_06_2019_01';
-name = 'multiple_01';
+% name = 'multiple_02';
 global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle plot_volume;
-PLOT = true;
+PLOT = false;
 PLOT_FIG = 1;
-    plot_mesh_original = 1;
-    plot_mesh_curvature = 1;
+    plot_mesh_original = 0;
+    plot_mesh_curvature = 0;
     plot_mesh_raw = 0;
     plot_mesh_clean = 0;
     plot_mesh_optimized = 0;
@@ -137,7 +136,7 @@ while true
     % incomplete particles for us, and more stable)
     [~, idx] = maxk(face_angles(face_remain_idx), round(0.1 * length(face_remain_idx)));
     seed = face_remain_idx(idx(randi(length(idx))));
-
+    
     % Initialization
     % Label all faces into one of the following categories in array 'state':
     % Cat 0: Unvisited face (black-colored)
@@ -367,11 +366,13 @@ end
 %% Compute volume(s)
 volumes_raw = zeros(object_no, 1);
 particle_points{object_no} = [];
+particle_faces{object_no} = [];
 % Particles on different figures
 for i = 1 : object_no
     object_faces = faces(:, object_set(:,i));
     object_vertices = vertex(:, unique(object_faces(:)))';
     particle_points{i} = object_vertices;
+    particle_faces{i} = object_faces;
     [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3), 0.12);
     % plot
     if PLOT && plot_volume
@@ -400,7 +401,8 @@ end
 %     object_faces = faces(:, object_set(:,i));
 %     object_vertices = vertex(:, unique(object_faces(:)))';
 %     particle_points{i} = object_vertices;
-%     
+%     particle_faces{i} = object_faces;
+%
 %     % Calculate volume encompassed by a set of points
 %     % volume_raw(i) = volumeFromPoints(object_vertices);
 %     [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
@@ -418,7 +420,7 @@ end
 % end
 
 % Cache
-% save('particles.mat', 'particle_points');
+% save('particles.mat', 'particle_points', 'particle_faces', 'vertex', 'faces');
 
 %% Optimize boundary (shortest path)
 STOP = false;

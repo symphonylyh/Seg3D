@@ -3,3 +3,6 @@
 **/.DS_Store
 *.off
 *.ply
+*.mat
+*.jpg
+*.png

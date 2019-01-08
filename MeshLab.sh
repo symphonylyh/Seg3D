@@ -1,3 +1,7 @@
+# Step 0: Merge point clouds
+# If VisualSfM by any chance splits the point cloud into several .ply files
+# Filters-Mesh Layer-Flatten Visible Layer--Toggle "Keep unreferenced vertices"
+
 # Step 1: Simpify point cloud
 # Filters-Cleaning and Repairing-Merge Close Vertices
 # Filters-Sampling-Point Cloud Simplification-Number of Samples: 100000
@@ -5,7 +9,7 @@
 # Filters-Sampling-Poisson-disk sampling-Toggle Base mesh subsampling, Number of Samples: 100000
 
 # Step 2: Surface reconstruction
-# Filters-Remeshing, Simplification and Reconstruction-Screened Poisson Surface Reconstruction
+# Filters-Remeshing, Simplification and Reconstruction-Screened Poisson Surface Reconstruction, Toggle Reconstruction Depth: 9 or 10 to get high resolution mesh
 
 # Step 3: Clean mesh
 # Filters-Selection-Select faces with edge longer than...-Delete selected faces and vertices
