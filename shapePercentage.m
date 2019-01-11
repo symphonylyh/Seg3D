@@ -16,6 +16,11 @@ addpath(genpath('sphereSampling'));
 addpath(genpath('spheretri'));
 % 3. Ray-Mesh collision (first run src_matlab/mexall.m): https://www.mathworks.com/matlabcentral/fileexchange/41504-ray-casting-for-deformable-triangular-3d-meshes
 addpath(genpath('opcodemesh'));
+% 4. Other libraries that might be useful:
+% Geom3D: https://www.mathworks.com/matlabcentral/fileexchange/24484-geom3d
+% Mesh-Mesh intersection: https://www.mathworks.com/matlabcentral/fileexchange/49160-fast-mesh-mesh-intersection-using-ray-tri-intersection-with-octree-spatial-partitioning
+% Simpler Ray-Mesh intersection using Möller and Trumbore (1997): https://www.mathworks.com/matlabcentral/fileexchange/33073-triangle-ray-intersection
+% Lecture notes: http://www.cs.cornell.edu/courses/cs417/2003sp/Lectures/Lecture33/33rayintersection.pdf
 
 % Key idea
 % Based on the point cloud of a segmented particle:
