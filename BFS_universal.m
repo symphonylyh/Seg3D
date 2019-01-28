@@ -1,9 +1,15 @@
-function [object_no,object_set] = BFS()
+function [object_no,object_set] = BFS_universal()
+% Universal version of Breadth First Search
+%   1. "Universal" means BFS applys to a fully connected mesh constructed 
+%   from 'vertex' & 'faces'
+%   2. This version is faster than BFS_regional() since there is no index
+%   mapping
+%   3. This version is limited in that it can't apply to disconnected mesh
 global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle plot_volume;
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors face_angles;
 
 % Dynamic thresholding
-threshold = 0.8; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
+threshold = 0.7; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
 increment = 0.01;
 INCREMENT = false;
 if INCREMENT
@@ -58,8 +64,8 @@ while true
     state = zeros(nface, 1); % array for recording face status: 0-unvisited face(black), 1-object face(red), 2-boundary face(white)
     state(face_segmented) = 1; % label already segmented faces as boundary
     q = CQueue();            % queue for BFS, storing the face index, i.e. ith face. Any face that entered into this queue is labelled 'object face'.
-    q.push(seed); q.push(placeholder);
     state(seed) = 1; % label starting face as 'object'
+    q.push(seed); q.push(placeholder);
     update_times = 0; % record the times of a ring BFS
 
     % BFS
@@ -153,10 +159,10 @@ while true
         end
         starter = unvisited(round(max(length(unvisited))/2+min(length(unvisited))/2));
         q.empty();
-        q.push(starter);
         state2(starter) = 1;
         face_set = zeros(nface, 1);
         face_set(starter) = 1; % don't forget!
+        q.push(starter);
         count = 0;
         while q.isempty() ~= 1
             curr_id = q.pop();
