@@ -1,8 +1,13 @@
-function percent_shape = shapeFlatten(cloudVertex, objectFace)
-% Flatten a 3D shape onto 2D distance map.
+function [scale, centroid, dist_map, dist_mask] = shapeDeflate(cloudVertex, objectFace)
+% Deflate a 3D shape onto normalized 2D distance map.
 % Input:
 %   cloudVertex: 3 x V matrix, vertex coordinates (for simplification, this is the vertex of the whole point cloud)
 %   objectFace:  3 x F matrix, indexed-face (for simplification, this is the indexed-face among the whole point cloud that belongs to one particle)
+% Output:
+%   scale: scalar, used for later recovery the real distance = dist * scale, picked as the maximum value of distance
+%   centroid: 3 x 1 vector, used for later recovery the real coordinates
+%   dist_map: N_theta x N_phi 2D image, with pixel values being the normalized distance from centroid
+%   dist_mask: N_theta x N_phi mask labelling the missing region
 
 %% Libraries related
 % 1. Centroid calculation (cloudCentroid.m, ignore the error checking): https://www.mathworks.com/matlabcentral/fileexchange/8514-centroid-of-a-convex-n-dimensional-polyhedron
@@ -29,7 +34,7 @@ addpath(genpath('opcodemesh'));
     % New attempt: use centroid of the convex hull. This is better and may be
     % the best-effort solution. The convex hull reconstruction to some extent
     % compensate the effect of missing portions (although not perfect)
-% Step 2: Evaluate spatial shape completeness using ray-tracing
+% Step 2: Evaluate all-around shape faces using ray-tracing
     % Step 2.1: Generate rays that cover the all-around space
     % Staring from the centroid, shoot rays in all directions. 
     % Old attempt: convert to phi-theta spherical coordinates. This is not
@@ -39,6 +44,8 @@ addpath(genpath('opcodemesh'));
     % Step 2.2: Detect ray-mesh collision
     % Check how many rays will intersect with the object's mesh faces, and the 
     % percentage of intersected directions indicates the particle shape completeness
+% Step 3: Deflate the 3D directions onto 2D spherical coordinates, and
+% set the pixel value at the coordinate as normalized face-centroid distance
 
 % -------------------------------------------------------------------------
 % Step 1 Compute centroid
@@ -87,24 +94,19 @@ dir = sample_vertex';
 %   points (NaN if the ray misses)
 %   hit_point: 3 x N matrix, 3D coordinates of the intersection points (NaN if the ray misses)
 
-% Normalize face distance
-distance = (d - min(d))/(max(d) - min(d));
-scaling(1) = max(d) - min(d);
-scaling(2) = min(d);
-% scaling is used for later recovery the real distance = dist * scaling(1) + scaling(2)
-
-% Face distance by deviation
-distance = abs(d - mean(d)) / mean(d);
-
-% Calculate percentage
-percent_shape = sum(hit(:))/length(hit);
-
 % -------------------------------------------------------------------------
-% Step 2.3 Downsampling onto a 2D image
-% -------------------------------------------------------------------------
-N_theta = 30; % image height
-N_phi = 30; % image width
+% Step 3 Deflate onto 2D distance map
+% ------------------------------------------------------------------------- 
+% Normalize face distance to 0~1
+distance = d / max(d); % Note: distance for no-intersection points will be NaN
+% distance = (d - min(d))/(max(d) - min(d));
+% distance = abs(d - mean(d)) / mean(d);
+scale = max(d);
+
+N_theta = 28; % image height
+N_phi = 28; % image width
 dist_map = zeros(N_theta, N_phi);
+dist_mask = zeros(N_theta, N_phi);
 cumulate_count = zeros(N_theta, N_phi);
 
 % Cartesian coordinates (x, y, z) to spherical coordinates (r, phi, theta)
@@ -119,19 +121,33 @@ cumulate_count = zeros(N_theta, N_phi);
 phi = atan2(sample_vertex(:,2), sample_vertex(:,1)); % azimuthal angle
 theta = acos(sample_vertex(:,3)); % polar angle
 
-% Something like a histogram voting
+% Grid bins, something like a histogram voting
 d_theta = (pi - 0) / N_theta;
 d_phi = (pi - (-pi)) / N_phi;
+
+% First create the mask
+for n = 1 : nSamples
+    if hit(n) == 0
+        i = max(1, ceil( (theta(n) - 0) / d_theta ));
+        j = max(1, ceil( (phi(n) - (-pi)) / d_phi ));
+        dist_mask(i,j) = 1;
+    end
+end
+
+% Then fill in the distance value filtered by the above mask
 for n = 1 : nSamples
     i = max(1, ceil( (theta(n) - 0) / d_theta ));
     j = max(1, ceil( (phi(n) - (-pi)) / d_phi ));
-    dist_map(i,j) = dist_map(i,j) + distance(n);
-    cumulate_count(i,j) = cumulate_count(i,j) + 1;
+    if dist_mask(i,j) ~= 1
+        dist_map(i,j) = dist_map(i,j) + distance(n);
+        cumulate_count(i,j) = cumulate_count(i,j) + 1;
+    end
 end
-cumulate_count(cumulate_count == 0) = 1;
-dist_map = dist_map ./ cumulate_count;
+cumulate_count(cumulate_count == 0) = 1; % to avoid divide by 0
+dist_map = dist_map ./ cumulate_count; % averaging
+dist_map(dist_mask == 1) = -1; % label no-intersection regions as -1
 
-PLOT = true;
+PLOT = false;
 if PLOT
 % Plot histogram
 figure(1)
