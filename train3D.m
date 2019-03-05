@@ -7,13 +7,13 @@
 
 close all;
 
-DEBUG = true;
-BATCH = false;
+DEBUG = false;
+BATCH = true;
 
 addpath(genpath('toolbox_graph'));
 
 %% Load rock information
-folder = 'rockGenerator/samples_100';
+folder = 'rockGenerator/samples_1000';
 files = [];
 
 if DEBUG
@@ -31,7 +31,7 @@ for f = 1 : length(files)
     % For Blender .obj file, here I slightly modified the read_obj.m in toolbox_graph
     [vertex,faces, ~] = read_obj(fullfile(folder, files(f).name));
     [scale_all(f), centroid_all(:,f), dist_map, dist_mask] = shapeDeflate(vertex, faces);
-%     imwrite(dist_map, fullfile(folder, strcat(num2str(f, '%04.f'), '.png')));
+    imwrite(dist_map, fullfile(folder, strcat(num2str(f, '%04.f'), '.png')));
 end
 % save(fullfile(folder, 'scale.mat'), 'scale_all');
 
