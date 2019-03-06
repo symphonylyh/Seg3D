@@ -5,7 +5,7 @@ function [object_no,object_set] = BFS_universal()
 %   2. This version is faster than BFS_regional() since there is no index
 %   mapping
 %   3. This version is limited in that it can't apply to disconnected mesh
-global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle plot_volume;
+global PLOT plot_mesh_raw plot_mesh_clean;
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors face_angles;
 
 % Dynamic thresholding

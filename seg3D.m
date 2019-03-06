@@ -6,20 +6,23 @@ addpath(genpath('toolbox_graph'));
 addpath(genpath('datastructure'));
 
 close all;
-% name = 'clean_mesh';
-name = 'mesh/multiple_02';
-%name = 'mesh/01';
-global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_region plot_mesh_raw plot_mesh_clean plot_mesh_optimized plot_particle plot_volume;
+
+global NAME;
+% NAME = 'mesh/clean_mesh';
+NAME = 'mesh/01_06_2019/01';
+
+global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_region plot_mesh_raw plot_mesh_clean plot_particle;
 PLOT = true;
 PLOT_FIG = 1;
-    plot_mesh_original = 0;
-    plot_mesh_curvature = 0;
-    plot_mesh_region = 1;
-    plot_mesh_raw = 0;
-    plot_mesh_clean = 0;
-    plot_mesh_optimized = 0;
-    plot_particle = 1;
-    plot_volume = 1;
+    plot_mesh_original = 0;   % in Seg3D.m, raw mesh from MeshLab
+    plot_mesh_curvature = 0;  % in Seg3D.m, show face angles
+    plot_mesh_region = 0;     % in Seg3D.m, show connected components
+    plot_mesh_raw = 0;        % in BFS_regional.m and BFS_universal.m, show BFS result
+    plot_mesh_clean = 0;      % in BFS_regional.m and BFS_universal.m, show cleaned BFS result after taking complement
+    plot_particle = 1;        % in Seg3D.m, show segmented particles
+
+global SAVE; % save segmentation results for geo3D.m use
+SAVE = true;
 
 %% Read Mesh and Pre-compute Mesh Info
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors;
@@ -33,7 +36,7 @@ global vertex faces nvertex nface face_rings vertex_rings face_normals face_cent
 
 tic
 
-[vertex,faces] = read_mesh(name);
+[vertex,faces] = read_mesh(NAME);
 
 % Pre-compute Mesh Info
 nvertex = size(vertex, 2);
@@ -194,25 +197,27 @@ face_rings = face_rings_all;
 vertex_rings = vertex_rings_all;
 
 %% Display segmented particle(s)
+plot_particle_separate = 0; % plot particles on different figures
+plot_particle_allinone = 1; % plot particles on one figure
 % Particles on different figures
-% if PLOT && plot_particle 
-%     for i = 1 : object_no
-%         % All particles in figure, highlight one
-%         % face_colors = zeros(nface, 1);
-%         % face_colors(object_set(:, i)) = 0.3;
-%         % plot_face_color(strcat('Particle ', num2str(i)), 1);
-%         
-%         % Single particle in figure
-%         faces_all = faces;
-%         faces = faces(:, object_set(:,i));
-%         face_colors = 0.3 * ones(length(faces), 1);
-%         plot_face_color(strcat('Particle ', num2str(i)), 1);
-%         faces = faces_all;
-%     end
-% end
+if PLOT && plot_particle && plot_particle_separate
+    for i = 1 : object_no
+        % All particles in figure, highlight one
+        % face_colors = zeros(nface, 1);
+        % face_colors(object_set(:, i)) = 0.3;
+        % plot_face_color(strcat('Particle ', num2str(i)), 1);
+        
+        % Single particle in figure
+        faces_all = faces;
+        faces = faces(:, object_set(:,i));
+        face_colors = 0.3 * ones(length(faces), 1);
+        plot_face_color(strcat('Particle ', num2str(i)), 1);
+        faces = faces_all;
+    end
+end
 
 % Particles on one figure
-if PLOT && plot_particle
+if PLOT && plot_particle && plot_particle_allinone
     face_colors = zeros(nface, 1);
     for i = 1 : object_no
         face_colors(object_set(:, i)) = i / object_no; % better color option here using linspecer.m
@@ -221,139 +226,15 @@ if PLOT && plot_particle
     colormap jet;
 end
     
-%% Compute volume(s)
-volumes_raw = zeros(object_no, 1);
+%% Save segmented particle(s) for geo3D.m
 particle_points{object_no} = [];
 particle_faces{object_no} = [];
-% Particles on different figures
 for i = 1 : object_no
     object_faces = faces(:, object_set(:,i));
     object_vertices = vertex(:, unique(object_faces(:)))';
     particle_points{i} = object_vertices;
     particle_faces{i} = object_faces;
-    [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3), 0.1);
-    % plot
-    if PLOT && plot_volume
-        figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
-        title(strcat('Particle ', num2str(i)));
-        subplot(1,2,1);
-        scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-        axis equal off;
-
-        subplot(1,2,2);
-        trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
-        axis equal off;
-    end
 end
-
-% Particles subplotted on one figure
-% if PLOT && plot_volume
-%     figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
-%     % Arrange subplots
-% %     fig_row = 2 * round(sqrt(object_no));
-% %     fig_col = 2 * ceil(object_no/(fig_row/2));
-%     fig_row = ceil(object_no/2);
-%     fig_col = 2 * 2;
-% end
-% for i = 1 : object_no
-%     object_faces = faces(:, object_set(:,i));
-%     object_vertices = vertex(:, unique(object_faces(:)))';
-%     particle_points{i} = object_vertices;
-%     particle_faces{i} = object_faces;
-%
-%     % Calculate volume encompassed by a set of points
-%     % volume_raw(i) = volumeFromPoints(object_vertices);
-%     [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-%     
-%     % plot
-%     if PLOT && plot_volume
-%         subplot(fig_row,fig_col,2*i-1);
-%         scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-%         axis equal off;
-% 
-%         subplot(fig_row,fig_col,2*i);
-%         trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
-%         axis equal off;
-%     end
-% end
-
-% Cache
-% save('particles.mat', 'particle_points', 'particle_faces', 'vertex', 'faces');
-
-test = false;
-if test
-%% Optimize boundary (shortest path)
-STOP = false;
-if STOP
-tic
-E_local = [];
-E_global = [];
-for i = 1 : length(boundaries)
-    neighbors = vertex_rings{boundaries(i)};
-    neighbors = intersect(neighbors, boundaries);
-    temp = [repmat(boundaries(i),length(neighbors),1) neighbors];
-    E_local = [E_local; temp];
-end
-
-object_faces = find(objects == 1); % edge for object faces only
-% object_faces = 1 : length(faces); % edge for all faces
-for i = 1 : length(object_faces)
-    neighbors = vertex_rings{object_faces(i)};
-    temp = [repmat(object_faces(i),length(neighbors),1) neighbors'];
-    E_global = [E_global; temp];   
-end
-
-num_change = 3;
-total_faces = length(object_faces);
-for i = 1 : num_change
-    boundaries = optimize_with_direct_dist(E_local, E_global, face_centers', boundaries', 1); 
-    % BFS
-    visited = zeros(size(faces, 2), 1);
-    fence = zeros(size(faces, 2), 1);
-    q.empty();
-    q.push(seed);
-    visited(seed) = 1;
-    fence(boundaries) = 1;
-    while q.isempty() ~= 1
-        curr_id = q.pop();
-        neighbors = face_rings{curr_id};
-        for f = 1 : length(neighbors)
-            adj_id = neighbors(f);
-            if visited(adj_id) == 0 % skip all visited faces
-                if fence(adj_id) == 0
-                    % object face (push to queue)
-                    visited(adj_id) = 1;
-                    q.push(adj_id); 
-                end
-            end
-        end
-    end
-    objects_temp = visited == 1;
-    if sum(objects_temp(:)) <= 0.6 * total_faces % should add seed
-        break;
-    end
-    objects = objects_temp;
-    boundaries = boundary_extract(faces, objects);
-    
-    % Update E_local
-    E_local = [];
-    for j = 1 : length(boundaries)
-        neighbors = vertex_rings{boundaries(j)};
-        neighbors = intersect(neighbors, boundaries);
-        temp = [repmat(boundaries(j),length(neighbors),1) neighbors];
-        E_local = [E_local; temp];
-    end
-end
-
-fprintf('Optimize boundary: %f seconds\n', toc);
-
-% Display optimized mesh
-if PLOT && plot_mesh_optimized
-    face_colors = zeros(nface, 1);
-    face_colors(objects) = 0.3;
-    face_colors(boundaries) = 1.0;
-    plot_face_color('Optimized Mesh', 1);
-end
-end
-
+if SAVE
+    save(strcat(NAME, '.mat'), 'particle_points', 'particle_faces', 'vertex', 'faces');
 end
