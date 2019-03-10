@@ -1,104 +1,118 @@
 close all;
 
-COMPLETNESS = false;
+global COMPLETENESS MAP;
+COMPLETENESS = false;
+MAP = true;
 
-%% Load particle information
-clear all;
+global PLOT PLOT_FIG plot_volume;
+PLOT = true;
+PLOT_FIG = 1;
+    plot_volume = 1;
+
+%% Load particle and scale information
 % load('particles.mat');
-load('mesh/01_06_2019/01.mat');
+NAME = 'mesh/01_06_2019/multiple_02'; 
+load(strcat(NAME, '.mat'));
 % 'faces' and 'vertex' are still global variables
+object_no = length(particle_faces);
 
-volumes_raw = zeros(object_no, 1);
-particle_points{object_no} = [];
-particle_faces{object_no} = [];
-% Particles on different figures
+[real_scale, sfm_scale] = textread(strcat(NAME, '.txt'), '%f %f');
+scale = mean(real_scale ./ sfm_scale); % convert sfm scale to cm scale
+
+%% Display segmented particle(s) and volume calculation
+plot_volume_separate = 1; % plot particles on different figures
+plot_volume_allinone = 0; % plot particles on one figure
+shrink = 0.2; % shrink factor for boundary(). 0-convex hull, 1-compact, 0.5-default
+
+if PLOT && plot_volume && plot_volume_allinone
+    % Particles subplotted on one figure
+    figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
+    fig_row = ceil(object_no/2);
+    fig_col = 2 * 2;
+end
+
+volume_raw = zeros(object_no, 1); % volume of incomplete particle
+completion = zeros(object_no, 1); % percentage of shape completeness
 for i = 1 : object_no
-    object_faces = faces(:, object_set(:,i));
-    object_vertices = vertex(:, unique(object_faces(:)))';
-    particle_points{i} = object_vertices;
-    particle_faces{i} = object_faces;
-    [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3), 0.1);
-    % plot
+    object_vertices = particle_points{i};
+    object_faces = particle_faces{i};
+    
+    % Calculate volume encompassed by a set of points
+    % volume_raw(i) = volumeFromPoints(object_vertices);
+    [B, volume_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3), shrink); 
+    
+    % Calculate percentage of shape completeness
+    if COMPLETENESS
+        completion(i) = shapePercentage(vertex, object_faces);
+    end
+    
+    % Visualize
     if PLOT && plot_volume
-        figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
-        title(strcat('Particle ', num2str(i)));
-        subplot(1,2,1);
-        scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-        axis equal off;
-
-        subplot(1,2,2);
-        trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
-        axis equal off;
+        if plot_volume_separate
+            figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
+            title(strcat('Particle ', num2str(i)));
+            % point cloud
+            subplot(1,2,1);
+            scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+            axis equal off;
+            % volume hull
+            subplot(1,2,2);
+            trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',1)
+            % shading
+            view(3);
+            light; lighting phong;
+            camlight('left');
+            shading interp;
+            axis equal off;
+        end
+        if plot_volume_allinone
+            % point cloud
+            subplot(fig_row,fig_col,2*i-1);
+            scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+            axis equal off;
+            % volume hull
+            subplot(fig_row,fig_col,2*i);
+            trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
+            axis equal off;
+        end
     end
 end
 
-% Particles subplotted on one figure
-% if PLOT && plot_volume
-%     figure(PLOT_FIG); PLOT_FIG = PLOT_FIG + 1;
-%     % Arrange subplots
-% %     fig_row = 2 * round(sqrt(object_no));
-% %     fig_col = 2 * ceil(object_no/(fig_row/2));
-%     fig_row = ceil(object_no/2);
-%     fig_col = 2 * 2;
-% end
-% for i = 1 : object_no
-%     object_faces = faces(:, object_set(:,i));
-%     object_vertices = vertex(:, unique(object_faces(:)))';
-%     particle_points{i} = object_vertices;
-%     particle_faces{i} = object_faces;
-%
-%     % Calculate volume encompassed by a set of points
-%     % volume_raw(i) = volumeFromPoints(object_vertices);
-%     [B, volumes_raw(i)] = boundary(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-%     
-%     % plot
-%     if PLOT && plot_volume
-%         subplot(fig_row,fig_col,2*i-1);
-%         scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
-%         axis equal off;
-% 
-%         subplot(fig_row,fig_col,2*i);
-%         trisurf(B,object_vertices(:,1),object_vertices(:,2),object_vertices(:,3),'Facecolor','red','FaceAlpha',0.1)
-%         axis equal off;
-%     end
-% end
-
-%% Determine shape completeness
-if COMPLETNESS
-tic
-
-object_no = length(particle_faces);
-completion = zeros(object_no, 1);
-for i = 1 : length(particle_faces)
-    object_faces = particle_faces{i};
-    completion(i) = shapePercentage(vertex, object_faces);
-end
-
-fprintf('Shape completeness: %f seconds\n', toc);
-end
+% Apply scale
+volume_raw = volume_raw * scale^3; % in cm^3
+mass_raw = volume_raw * 2.65; % in g (assume density = 2.65g/cm^3)
 
 %% Generate incomplete distance map
-folder = 'fooling_set';
-object_no = length(particle_faces);
-scale_all = zeros(length(particle_faces), 1); 
-centroid_all = zeros(3, length(particle_faces)); 
-for i = 1 : 1 %length(particle_faces)
-    object_faces = particle_faces{i};
-    % Deflate
-    [scale_all(i), centroid_all(:,i), dist_map, dist_mask] = shapeDeflate(vertex, object_faces); 
-    % imwrite(dist_map, fullfile(folder, strcat(num2str(i, '%04.f'), '.png')));
-    % imwrite(dist_mask, fullfile(folder, strcat(num2str(i, '%04.f'), '_mask.png')));
-    % GAN generate inpainted map
-    % ...
-    dist_map(dist_mask == 1) = 0.5 + 0.5 * rand(sum(dist_mask(:)), 1);
-    % Inflate
-    vertex_inpaint = shapeInflate(scale_all(i), centroid_all(:,i), dist_map, dist_mask);
-    % Plot
-    figure(1); hold on;
-    object_vertices = vertex(:, unique(object_faces(:)));  
-    scatter3(object_vertices(1,:), object_vertices(2,:), object_vertices(3,:), 'filled', 'b');
-    scatter3(vertex_inpaint(1,:), vertex_inpaint(2,:), vertex_inpaint(3,:), 'filled', 'r');
-    axis equal
+if MAP
+    load('particles.mat');
+    folder = 'fooling_set';
+    object_no = length(particle_faces);
+    scale_all = zeros(length(particle_faces), 1); 
+    centroid_all = zeros(3, length(particle_faces)); 
+    for i = 7 : 7 %length(particle_faces)
+        object_faces = particle_faces{i};
+        % Deflate
+        [scale_all(i), centroid_all(:,i), dist_map, dist_mask] = shapeDeflate(vertex, object_faces); 
+        % imwrite(dist_map, fullfile(folder, strcat(num2str(i, '%04.f'), '.png')));
+        % imwrite(dist_mask, fullfile(folder, strcat(num2str(i, '%04.f'), '_mask.png')));
+        % GAN generate inpainted map
+        % ...
+        dist_map(dist_mask == 1) = 0.5 + 0.5 * rand(sum(dist_mask(:)), 1);
+        % test
+        dist_map = imread('output.png');
+        dist_map = dist_map(:,:,1);
+        dist_map = imresize(dist_map, [32 32]);
+        dist_mask = logical(dist_mask);
+        dist_map(dist_mask) = dist_map(dist_mask) * 1.1;
+        dist_map = mat2gray(dist_map);
+        % Inflate
+        vertex_inpaint = shapeInflate(scale_all(i), centroid_all(:,i), dist_map, dist_mask);
+        % Plot
+        figure(1); hold on;
+        object_vertices = vertex(:, unique(object_faces(:)));  
+        scatter3(object_vertices(1,:), object_vertices(2,:), object_vertices(3,:), 'filled', 'b');
+        scatter3(vertex_inpaint(1,:), vertex_inpaint(2,:), vertex_inpaint(3,:), 'filled', 'r');
+        axis equal
+    end
+    % save(fullfile(folder, 'scale.mat'), 'scale_all', 'centroid_all');
 end
-% save(fullfile(folder, 'scale.mat'), 'scale_all', 'centroid_all');
-

@@ -13,7 +13,7 @@ BATCH = true;
 addpath(genpath('toolbox_graph'));
 
 %% Load rock information
-folder = 'rockGenerator/samples_1000';
+folder = 'rockGenerator/samples_50';
 files = [];
 
 if DEBUG
@@ -22,7 +22,7 @@ end
 
 if BATCH
     files = dir(folder);
-    files = files(~ismember({files.name},{'.','..'}));
+    files = files(~ismember({files.name},{'.','..','.DS_Store'}));
 end
 
 scale_all = zeros(length(files), 1);
@@ -31,6 +31,9 @@ for f = 1 : length(files)
     % For Blender .obj file, here I slightly modified the read_obj.m in toolbox_graph
     [vertex,faces, ~] = read_obj(fullfile(folder, files(f).name));
     [scale_all(f), centroid_all(:,f), dist_map, dist_mask] = shapeDeflate(vertex, faces);
+    dist_map = imresize(dist_map, [256 256]); % for DeepFill, at least 64x64 images are required, I don't know why
+    dist_map(dist_map < 0) = 0;
+    dist_map = repmat(dist_map, 1, 1, 3); % for DeepFill 3-channel images are required
     imwrite(dist_map, fullfile(folder, strcat(num2str(f, '%04.f'), '.png')));
 end
 % save(fullfile(folder, 'scale.mat'), 'scale_all');

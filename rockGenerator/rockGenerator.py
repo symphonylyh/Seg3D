@@ -38,7 +38,32 @@ for ob in scene.objects:
 bpy.ops.object.delete()
 
 # Generate rocks
-bpy.ops.mesh.rocks(num_of_rocks = N) # in Blender GUI, floating over the toggle, the corresponding variable name will pop up as "MEST_OT.num_of_rocks"
+from enum import Enum 
+# Six preset prototypes the add-on has
+class RockType(Enum):
+    FakeOcean = '5'
+    Ice = '4' 
+    # scale_X = [0.0, 2.0], skew_X = 0, scale_Y = [0.0, 2.0], skew_Y = 0, scale_Z = [0.0, 2.0], skew_Z = 0
+    # deform = 5.0, rough = 1.0, detail = 3, display_detail = 2
+    Sandstone = '3'
+    Asteroid = '2' 
+    # scale_X = [1.0, 5.0], skew_X = 0, scale_Y = [1.0, 5.0], skew_Y = 0, scale_Z = [1.0, 5.0], skew_Z = 0
+    # deform = 7.5, rough = 3.0, detail = 4, display_detail = 3
+    RiverRock = '1' 
+    # scale_X = [0.5, 1.25], skew_X = -0.5, scale_Y = [0.5, 1.25], skew_Y = -0.5, scale_Z = [0.5, 1.25], skew_Z = -0.5
+    # deform = 3.0, rough = 2.0, detail = 2, display_detail = 2
+    Default = '0' 
+    # scale_X = [1.0, 1.0], skew_X = 0, scale_Y = [1.0, 1.0], skew_Y = 0, scale_Z = [1.0, 1.0], skew_Z = 0
+    # deform = 5.0, rough = 2.5, detail = 3, display_detail = 2
+# We can also directly modified the preset settings in add_mesh_rocks.xml
+# If I use a preset shape except default, changing the parameters below doesn't work...you need to dig into Blender's add-on path to update its .xml
+
+# in Blender GUI, floating over the toggle, the corresponding variable name will pop up as "MEST_OT.num_of_rocks"
+bpy.ops.mesh.rocks(num_of_rocks = N, preset_values = RockType.Ice.value) 
+# bpy.ops.mesh.rocks(num_of_rocks = N, preset_values = RockType.Asteroid.value) 
+bpy.ops.mesh.rocks(num_of_rocks = N, preset_values = RockType.RiverRock.value) 
+# bpy.ops.mesh.rocks(num_of_rocks = N, preset_values = RockType.Default.value) 
+bpy.ops.mesh.rocks(preset_values = RockType.Default.value, num_of_rocks = N, scale_X = [1.0, 5.0], skew_X = 0, scale_Y = [2.0, 6.0], skew_Y = 0, scale_Z = [1.5, 4.5], skew_Z = 0, deform = 6.0, rough = 1.0, detail = 3, display_detail = 2, mat_enable = False, use_random_seed = True, user_seed = 100) 
 
 # Export mesh (.obj)
 for object in bpy.context.scene.objects:

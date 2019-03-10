@@ -103,8 +103,8 @@ distance = d / max(d); % Note: distance for no-intersection points will be NaN
 % distance = abs(d - mean(d)) / mean(d);
 scale = max(d);
 
-N_theta = 28; % image height
-N_phi = 28; % image width
+N_theta = 32; % image height
+N_phi = 32; % image width
 dist_map = zeros(N_theta, N_phi);
 dist_mask = zeros(N_theta, N_phi);
 cumulate_count = zeros(N_theta, N_phi);
@@ -145,7 +145,7 @@ for n = 1 : nSamples
 end
 cumulate_count(cumulate_count == 0) = 1; % to avoid divide by 0
 dist_map = dist_map ./ cumulate_count; % averaging
-dist_map(dist_mask == 1) = -1; % label no-intersection regions as -1
+% dist_map(dist_mask == 1) = -1; % label no-intersection regions as -1
 
 PLOT = false;
 if PLOT

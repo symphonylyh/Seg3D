@@ -1,8 +1,8 @@
-function [object_no,object_set] = BFS_regional()
+function [object_no,object_set] = BFS_regional(threshold)
 % Regional version of Breadth First Search
 %   1. "Regional" means BFS applys to connected/disconnected mesh constructed 
 %   from 'vertex' & 'faces'
-%   2. This version is slower than BFS_regional() due to index mapping
+%   2. This version is slower than BFS_universal() due to index mapping
 %   3. This version is versatile in that it can apply to both types of mesh
 global PLOT plot_mesh_raw plot_mesh_clean;
 global vertex faces nvertex nface face_rings vertex_rings face_normals face_centers face_colors face_angles;
@@ -12,7 +12,7 @@ global M; % global face indices (5876,1293,...) to linear indices (0,1,...)
 % Map convertion (everything pushed to queue is the global face index! everyting queried in the global variables is the mapped index!)
 
 % Dynamic thresholding
-threshold = 0.7; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
+% threshold = 0.7; % curvature for convexity/concavity (adjustable, and since both vectors are normalized, this threshold value is actually a critical angle that you can specify)
 increment = 0.01;
 INCREMENT = false;
 if INCREMENT
@@ -128,16 +128,16 @@ while true
     % fprintf('BFS: %f seconds\n', toc);
     % fprintf('BFS completes at %d loops\n', update_times);
 
-    % Display raw mesh
+    % Display raw mesh (this will accumulatively display the newly identified faces along with already segmented parts)
     if PLOT && plot_mesh_raw
         % Per-face coloring: Non-visited face-0 (black), object vertex-0.3 (red), boundary vertex-1.0 (white)
         face_colors = zeros(nface, 1);
         objects = state == 1; face_colors(objects) = 0.3;
         boundaries = state == 2; face_colors(boundaries) = 1.0;
         plot_face_color('Raw Mesh', 1);
-        % Label the seed location by plotting normal vector
+        % Label the current seed location by plotting normal vector
         hold on;
-        id = seed;
+        id = M(seed); % since seed is converted by face_subset_idx, here we should convert back to query face_centers and face_normals
         quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id)/4, face_normals(2,id)/4, face_normals(3,id)/4, 'r');
     end
 
@@ -159,8 +159,9 @@ while true
 
     connect = 0; % No. of connected components
     component = {};
+    starters = {}; % for plot
     while true
-        unvisited = find(state2 == 0); % index of all unvisited faces
+        unvisited = find(state2 == 0); % index of all unvisited faces ('unvisited' in the context is the complement of the newly-identified faces i.e. complement(state2))
         if (length(unvisited) == 0) 
             break; % if no more unvisited faces, exit
         end
@@ -194,6 +195,7 @@ while true
         end
         connect = connect + 1;
         component{connect} = face_set; % component{i} is the logical face index array of the ith component
+        starters{connect} = starter; % for plot
         % fprintf('Connected Component %d: %d faces, starter %d\n', connect, count, starter);
     end
     % fprintf('Total connected components: %d\n', connect); 
@@ -207,26 +209,38 @@ while true
     max_set = 1;
     max_face = 0;
     for c = 1 : connect
-        if length(component{c}) > max_face
+        if sum(component{c}) > max_face
             max_set = c;
-            max_face = length(component{c});
+            max_face = sum(component{c});
+            % Bug fix March 9:
+            % if length(component{c}) > max_face
+            % max_face = length(component{c}); 
+            % 'length' is always = nface...should both be 'sum'!
         end
     end
 
     % Clean the mesh by taking the complement of the largest component
-    objects = ~component{max_set} & face_segmented == 0; % bug fix
+    if connect == 0 % special case: if there is nothing left (the whole mesh is traversed), component{} is empty, connect = 0, we should skip
+        objects = face_segmented == 0; % bug fix March_6
+    else
+        objects = ~component{max_set} & face_segmented == 0; % bug fix
+    end
     
     % Extract boundary faces from the cleaned mesh
     boundaries = boundary_extract(objects);
 
     % fprintf('Mesh cleaning: %f seconds\n', toc);
 
-    % Display cleaned mesh
+    % Display cleaned mesh (this will only display the newly identified faces in current iteration)
     if PLOT && plot_mesh_clean
         face_colors = zeros(nface, 1);
         face_colors(objects) = 0.3;
         face_colors(boundaries) = 1.0;
         plot_face_color('Cleaned Mesh', 1);
+        % Label the current starter location by plotting normal vector
+        hold on;
+        id = M(starters{max_set}); % since starter is converted by face_subset_idx, here we should convert back to query face_centers and face_normals
+        quiver3(face_centers(1,id), face_centers(2,id), face_centers(3,id), face_normals(1,id)/4, face_normals(2,id)/4, face_normals(3,id)/4, 'b');
     end
 
     % Record successfully segmented particle faces
