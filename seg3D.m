@@ -9,7 +9,7 @@ close all;
 
 global NAME;
 % NAME = 'mesh/clean_mesh';
-NAME = 'mesh/01_06_2019/multiple_03';
+NAME = 'mesh/03_20_2019/RR6_keystone_2';
 
 global PLOT PLOT_FIG plot_mesh_original plot_mesh_curvature plot_mesh_cut plot_mesh_region plot_mesh_raw plot_mesh_clean plot_particle;
 PLOT = true;
@@ -19,7 +19,7 @@ PLOT_FIG = 1;
     plot_mesh_cut = 1;        % in Seg3D.m, show mesh after boundary removal
     plot_mesh_region = 0;     % in Seg3D.m, show connected components
     plot_mesh_raw = 0;        % in BFS_regional.m and BFS_universal.m, show raw BFS result (red arrow for seed location)
-    plot_mesh_clean = 0;      % in BFS_regional.m and BFS_universal.m, show cleaned BFS result after taking complement (blue arrow for complement seed location)
+    plot_mesh_clean = 1;      % in BFS_regional.m and BFS_universal.m, show cleaned BFS result after taking complement (blue arrow for complement seed location)
     plot_particle = 1;        % in Seg3D.m, show segmented particles
 
 global SAVE; % save segmentation results for geo3D.m use

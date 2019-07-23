@@ -1,8 +1,9 @@
 close all;
 
-global COMPLETENESS MAP;
+global SINGLE COMPLETENESS MAP;
+SINGLE = true;
 COMPLETENESS = false;
-MAP = true;
+MAP = false;
 
 global PLOT PLOT_FIG plot_volume;
 PLOT = true;
@@ -10,11 +11,21 @@ PLOT_FIG = 1;
     plot_volume = 1;
 
 %% Load particle and scale information
-% load('particles.mat');
-NAME = 'mesh/01_06_2019/multiple_02'; 
-load(strcat(NAME, '.mat'));
-% 'faces' and 'vertex' are still global variables
-object_no = length(particle_faces);
+if SINGLE
+    % Single particle mode (with manually cleaned .off mesh)
+    NAME = 'mesh/03_20_2019/RR6_keystone_2';
+    addpath(genpath('toolbox_graph'));
+    [vertex,faces] = read_mesh(NAME);
+    particle_points{1} = vertex';
+    particle_faces{1} = faces';
+    object_no = 1;
+else
+    % Normal mode (with mesh info from seg3D.m steps)
+    NAME = 'mesh/01_06_2019/multiple_02'; 
+    load(strcat(NAME, '.mat'));
+    % 'faces' and 'vertex' are still global variables
+    object_no = length(particle_faces);
+end
 
 [real_scale, sfm_scale] = textread(strcat(NAME, '.txt'), '%f %f');
 scale = mean(real_scale ./ sfm_scale); % convert sfm scale to cm scale
@@ -22,7 +33,7 @@ scale = mean(real_scale ./ sfm_scale); % convert sfm scale to cm scale
 %% Display segmented particle(s) and volume calculation
 plot_volume_separate = 1; % plot particles on different figures
 plot_volume_allinone = 0; % plot particles on one figure
-shrink = 0.2; % shrink factor for boundary(). 0-convex hull, 1-compact, 0.5-default
+shrink = 0.4; % shrink factor for boundary(). 0-convex hull, 1-compact, 0.5-default
 
 if PLOT && plot_volume && plot_volume_allinone
     % Particles subplotted on one figure

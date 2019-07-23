@@ -1,7 +1,7 @@
 % H = GUI;
 close all;
 
-filename = 'test_7.jpg';
+filename = 'test_5.jpg';
 %filename = 'f0105.jpg';
 I = imread(filename);    
 if size(I,3) == 3;
@@ -30,11 +30,11 @@ outImg = imgaussfilt(I, 1);
 % 
 % imshow(outImg);
 
-strel_size1 = 13;
+strel_size1 = 5;
 L = marker_watershed(outImg, strel_size1);
 Lrgb = label2rgb(L, 'jet', 'w', 'shuffle');
 figure;
-imshow(outImg,[]);
+imshow(I,[]);
 hold on;
 himage = imshow(Lrgb);
 set(himage, 'AlphaData', 0.3);
