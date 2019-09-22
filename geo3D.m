@@ -3,7 +3,7 @@ close all;
 global SINGLE COMPLETENESS MAP;
 SINGLE = true;
 COMPLETENESS = false;
-MAP = false;
+MAP = true;
 
 global PLOT PLOT_FIG plot_volume;
 PLOT = true;
@@ -31,8 +31,8 @@ end
 scale = mean(real_scale ./ sfm_scale); % convert sfm scale to cm scale
 
 %% Display segmented particle(s) and volume calculation
-plot_volume_separate = 1; % plot particles on different figures
-plot_volume_allinone = 0; % plot particles on one figure
+plot_volume_separate = 0; % plot particles on different figures
+plot_volume_allinone = 1; % plot particles on one figure
 shrink = 0.4; % shrink factor for boundary(). 0-convex hull, 1-compact, 0.5-default
 
 if PLOT && plot_volume && plot_volume_allinone
@@ -79,7 +79,7 @@ for i = 1 : object_no
         if plot_volume_allinone
             % point cloud
             subplot(fig_row,fig_col,2*i-1);
-            scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3));
+            scatter3(object_vertices(:,1), object_vertices(:,2), object_vertices(:,3), 2);
             axis equal off;
             % volume hull
             subplot(fig_row,fig_col,2*i);
@@ -100,7 +100,8 @@ if MAP
     object_no = length(particle_faces);
     scale_all = zeros(length(particle_faces), 1); 
     centroid_all = zeros(3, length(particle_faces)); 
-    for i = 7 : 7 %length(particle_faces)
+    for i = 1 : length(particle_faces)
+    %for i = 9 : 9
         object_faces = particle_faces{i};
         % Deflate
         [scale_all(i), centroid_all(:,i), dist_map, dist_mask] = shapeDeflate(vertex, object_faces); 
@@ -118,12 +119,25 @@ if MAP
         dist_map = mat2gray(dist_map);
         % Inflate
         vertex_inpaint = shapeInflate(scale_all(i), centroid_all(:,i), dist_map, dist_mask);
-        % Plot
+        % Plot point cloud
         figure(1); hold on;
         object_vertices = vertex(:, unique(object_faces(:)));  
-        scatter3(object_vertices(1,:), object_vertices(2,:), object_vertices(3,:), 'filled', 'b');
-        scatter3(vertex_inpaint(1,:), vertex_inpaint(2,:), vertex_inpaint(3,:), 'filled', 'r');
+        point_size = 5; % small size (5) for group view, bigger (30) for single view
+        scatter3(object_vertices(1,:), object_vertices(2,:), object_vertices(3,:), point_size, 'filled', 'b');
+        scatter3(vertex_inpaint(1,:), vertex_inpaint(2,:), vertex_inpaint(3,:), point_size, 'filled', 'r');
+        axis equal
+        % Plot mesh
+        figure(2); hold on;
+        merge_vertices = [object_vertices vertex_inpaint];
+        [B, ~] = boundary(merge_vertices(1, :)', merge_vertices(2, :)', merge_vertices(3, :)', 0.5); 
+        trisurf(B,merge_vertices(1,:), merge_vertices(2,:), merge_vertices(3,:),'Facecolor','red','FaceAlpha',1)
+        view(3);
+        light; lighting phong;
+        camlight('left');
+        shading interp;
+        colormap gray;
         axis equal
     end
+    
     % save(fullfile(folder, 'scale.mat'), 'scale_all', 'centroid_all');
 end

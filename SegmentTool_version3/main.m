@@ -1,9 +1,11 @@
 % H = GUI;
 close all;
 
-filename = 'test_5.jpg';
+filename = '0185.jpg';
 %filename = 'f0105.jpg';
-I = imread(filename);    
+I = imread(filename);   
+ 
+imshow(I);
 if size(I,3) == 3;
     I = rgb2gray(I);
 end
@@ -30,7 +32,7 @@ outImg = imgaussfilt(I, 1);
 % 
 % imshow(outImg);
 
-strel_size1 = 5;
+strel_size1 = 9;
 L = marker_watershed(outImg, strel_size1);
 Lrgb = label2rgb(L, 'jet', 'w', 'shuffle');
 figure;
